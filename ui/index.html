@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kyber — Coffre-Fort Post-Quantique</title>
+  <meta name="description" content="Kyber — Le premier gestionnaire de mots de passe post-quantique français. Zéro cloud, zéro abonnement." />
+  <link rel="stylesheet" href="/style.css?v=4">
+</head>
+<body>
+<div id="app">
+  <div class="bg-grid"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- ═══ ÉCRAN LOGIN ═══ -->
+  <div id="screen-login" class="screen active">
+    <div class="login-wrap">
+      <div class="login-logo">
+        <div class="logo-hex">⬡</div>
+        <h1>Kyber</h1>
+        <p class="login-tagline">Coffre-Fort Post-Quantique Français 🇫🇷</p>
+      </div>
+      <div class="login-card">
+        <div class="login-tabs">
+          <button class="ltab active" id="ltab-open">Ouvrir le coffre</button>
+          <button class="ltab" id="ltab-create">Créer un coffre</button>
+        </div>
+        <div class="field" id="field-path">
+          <label>Chemin du coffre</label>
+          <div class="input-row">
+            <input type="text" id="vault-path" placeholder="ex: C:\Users\vous\coffre.vault" />
+            <button class="icon-btn" id="browse-btn" title="Parcourir">📂</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Mot de passe maître</label>
+          <div class="input-row">
+            <input type="password" id="master-pass" placeholder="Entrez votre mot de passe maître" />
+            <button class="icon-btn" id="toggle-pass" title="Afficher">👁</button>
+          </div>
+        </div>
+        <div id="create-warning" class="warn-box hidden">
+          ⚠️ Ce mot de passe est <strong>irremplaçable</strong>. En cas de perte, vos données seront <strong>définitivement inaccessibles</strong>. Notez-le physiquement.
+        </div>
+        <button class="btn-primary full" id="login-btn">Déverrouiller</button>
+        <p id="login-err" class="err-text"></p>
+        <div class="login-badge">🔒 Kyber1024 · AES-256-GCM · Argon2id</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ APPLICATION PRINCIPALE ═══ -->
+  <div id="screen-app" class="screen">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sb-logo">
+        <span class="sb-hex">⬡</span>
+        <span class="sb-name">Kyber</span>
+      </div>
+      <nav class="sb-nav">
+        <a href="#" class="nav-item active" data-view="view-vault" id="nav-vault">
+          <span class="ni">🔐</span><span>Coffre</span>
+        </a>
+        <a href="#" class="nav-item" data-view="view-generator" id="nav-generator">
+          <span class="ni">⚡</span><span>Générateur</span>
+        </a>
+        <a href="#" class="nav-item" data-view="view-health" id="nav-health">
+          <span class="ni">🛡️</span><span>Santé</span>
+          <span class="nav-badge hidden" id="health-badge">!</span>
+        </a>
+        <a href="#" class="nav-item" data-view="view-files" id="nav-files">
+          <span class="ni">📁</span><span>Fichiers</span>
+        </a>
+        <a href="#" class="nav-item" data-view="view-settings" id="nav-settings">
+          <span class="ni">⚙️</span><span>Paramètres</span>
+        </a>
+      </nav>
+      <div class="sb-scanner" id="scanner-indicator">
+        <div class="scan-dot"></div>
+        <span id="scanner-label">Scanner actif</span>
+      </div>
+    </aside>
+
+    <!-- Contenu principal -->
+    <main class="main">
+
+      <!-- ── Coffre ── -->
+      <section id="view-vault" class="view active">
+        <!-- Bannière migration v1 → v2 -->
+        <div id="migrate-banner" class="migrate-banner hidden">
+          <div class="mb-left">
+            <span class="mb-icon">🔒</span>
+            <div>
+              <strong>Mise à niveau disponible</strong>
+              <p>Ce coffre utilise l'ancienne crypto (Argon2id seul). Migrez vers <strong>Kyber1024 + Argon2id</strong> pour une protection post-quantique complète.</p>
+            </div>
+          </div>
+          <div class="mb-actions">
+            <button class="btn-primary" id="migrate-btn">Migrer vers v2</button>
+            <button class="btn-ghost" id="migrate-dismiss">Plus tard</button>
+          </div>
+        </div>
+        <div class="view-header">
+          <h2>Votre Coffre</h2>
+          <div class="header-right">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="search-input" placeholder="Rechercher…" />
+            </div>
+            <button class="btn-primary" id="add-btn">+ Ajouter</button>
+          </div>
+        </div>
+        <div id="entries-grid" class="entries-grid"></div>
+        <div id="vault-empty" class="empty-state hidden">
+          <div class="empty-ico">🔒</div>
+          <h3>Coffre vide</h3>
+          <p>Ajoutez votre première entrée ou laissez Kyber détecter automatiquement un champ mot de passe.</p>
+        </div>
+      </section>
+
+      <!-- ── Générateur ── -->
+      <section id="view-generator" class="view">
+        <div class="view-header"><h2>Générateur de Mot de Passe</h2></div>
+        <div class="gen-card">
+          <div class="gen-output-row">
+            <input type="text" id="gen-out" readonly placeholder="Cliquez sur Générer…" />
+            <button class="icon-btn-lg" id="gen-copy" title="Copier">📋</button>
+          </div>
+          <div class="strength-row">
+            <div class="strength-bar"><div id="strength-fill" class="strength-fill"></div></div>
+            <span id="strength-lbl" class="strength-lbl">—</span>
+          </div>
+          <div class="gen-opts">
+            <div class="slider-row">
+              <label>Longueur : <strong id="len-val">24</strong> caractères</label>
+              <input type="range" id="gen-len" min="8" max="64" value="24" />
+            </div>
+            <div class="checkboxes">
+              <label class="cb-label"><input type="checkbox" id="opt-upper" checked /> Majuscules (A-Z)</label>
+              <label class="cb-label"><input type="checkbox" id="opt-lower" checked /> Minuscules (a-z)</label>
+              <label class="cb-label"><input type="checkbox" id="opt-digits" checked /> Chiffres (0-9)</label>
+              <label class="cb-label"><input type="checkbox" id="opt-symbols" checked /> Symboles (!@#…)</label>
+            </div>
+          </div>
+          <button class="btn-primary full" id="gen-btn">⚡ Générer</button>
+        </div>
+      </section>
+
+      <!-- ── Santé ── -->
+      <section id="view-health" class="view">
+        <div class="view-header">
+          <h2>Santé du Coffre</h2>
+          <button class="btn-secondary" id="health-refresh">↻ Actualiser</button>
+        </div>
+        <div class="health-kpis">
+          <div class="kpi kpi-warn" id="kpi-weak">
+            <div class="kpi-num" id="cnt-weak">—</div>
+            <div class="kpi-lbl">Mots de passe faibles</div>
+          </div>
+          <div class="kpi kpi-info" id="kpi-dupes">
+            <div class="kpi-num" id="cnt-dupes">—</div>
+            <div class="kpi-lbl">Doublons</div>
+          </div>
+          <div class="kpi kpi-muted" id="kpi-old">
+            <div class="kpi-num" id="cnt-old">—</div>
+            <div class="kpi-lbl">Anciens (&gt;90 jours)</div>
+          </div>
+        </div>
+        <div id="health-list" class="health-list"></div>
+      </section>
+
+      <!-- ── Fichiers Chiffrés ── -->
+      <section id="view-files" class="view">
+        <div class="view-header">
+          <h2>Coffre de Fichiers</h2>
+        </div>
+        <p class="files-subtitle">Chiffrez vos fichiers avec la clé de ce coffre. Seul ce coffre peut les ouvrir.</p>
+
+        <div class="files-actions-grid">
+          <div class="file-action-card">
+            <div class="fa-icon">🔒</div>
+            <h3>Chiffrer un fichier</h3>
+            <p>PDF, Excel, Word, images… tout type de fichier.</p>
+            <button class="btn-primary full" id="encrypt-file-btn">Sélectionner un fichier</button>
+          </div>
+          <div class="file-action-card">
+            <div class="fa-icon">🗂️</div>
+            <h3>Chiffrer un dossier</h3>
+            <p>Tout le contenu du dossier dans un seul fichier <code>.kyber</code>.</p>
+            <button class="btn-primary full" id="encrypt-folder-btn">Sélectionner un dossier</button>
+          </div>
+          <div class="file-action-card">
+            <div class="fa-icon">🔓</div>
+            <h3>Déchiffrer un fichier</h3>
+            <p>Restaure un fichier <code>.kyber</code> avec ce coffre uniquement.</p>
+            <button class="btn-primary full" id="decrypt-file-btn">Ouvrir un .kyber</button>
+          </div>
+        </div>
+
+        <div id="file-status" class="file-status hidden"></div>
+
+        <div class="file-info-box">
+          <span class="fi-icon">🔐</span>
+          <div>
+            <strong>Lié à votre coffre</strong>
+            <p>Les fichiers chiffrés ici ne peuvent être déchiffrés qu'avec le mot de passe de <em>ce</em> coffre exact. Créer un nouveau coffre ne donne pas accès à ces fichiers.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Paramètres ── -->
+      <section id="view-settings" class="view">
+        <div class="view-header"><h2>Paramètres</h2></div>
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h3>Coffre actif</h3>
+            <p id="sett-path" class="sett-val">—</p>
+            <p id="sett-vault-version" class="sett-val" style="margin-top:6px;font-size:.8rem;color:var(--muted)">—</p>
+          </div>
+          <div class="settings-card">
+            <h3>Importer des mots de passe</h3>
+            <p>Migrez facilement depuis vos anciens gestionnaires.</p>
+            <div class="import-row">
+              <button class="btn-secondary" id="import-bw">📥 Bitwarden CSV</button>
+              <button class="btn-secondary" id="import-1p">📥 1Password CSV</button>
+              <button class="btn-secondary" id="import-gen">📥 Autre (CSV)</button>
+            </div>
+            <p id="import-status" class="import-status"></p>
+            <input type="file" id="file-input" accept=".csv" class="hidden" />
+          </div>
+          <div class="settings-card" id="export-card">
+            <h3>Exporter les mots de passe <span style="font-size:.7rem;color:var(--blue);font-weight:600;">PRO</span></h3>
+            <p>Exportez votre coffre au format CSV compatible Bitwarden / 1Password.</p>
+            <button class="btn-secondary" id="export-csv-btn">📤 Exporter en CSV</button>
+            <p id="export-status" class="import-status"></p>
+          </div>
+          <div class="settings-card" id="sett-license-card">
+            <h3>Licence Kyber</h3>
+            <div id="sett-license-free">
+              <p>Vous utilisez la version <strong>Gratuite</strong> — 3 mots de passe maximum.</p>
+              <div class="import-row" style="margin-top:14px">
+                <button class="btn-primary" id="sett-upgrade-btn">⚡ Mettre à niveau</button>
+              </div>
+              <div class="field" style="margin-top:18px">
+                <label>Clé de licence (reçue par e-mail)</label>
+                <input type="text" id="sett-license-key" placeholder="Collez votre clé ici" />
+              </div>
+              <button class="btn-secondary full" id="sett-activate-btn" style="margin-top:8px">Activer la licence</button>
+              <p id="sett-license-err" class="err-text"></p>
+            </div>
+            <div id="sett-license-pro" class="hidden">
+              <p>Licence <strong style="color:var(--green)">Premium ✔</strong> active.</p>
+              <p id="sett-license-name" style="color:var(--muted2);font-size:.82rem;margin-top:4px"></p>
+            </div>
+          </div>
+          <div class="settings-card">
+            <h3>À propos de Kyber</h3>
+            <p>Version 1.0.0 · Kyber1024 + AES-256-GCM + Argon2id (NIST PQC)</p>
+            <p class="fr-badge">Développé en France 🇫🇷 — Aucune donnée transmise</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══ POPUP SCANNER ═══ -->
+  <div id="scan-popup" class="scan-popup hidden">
+    <div class="sp-header">
+      <div class="sp-title"><span class="sp-dot"></span>Champ détecté</div>
+      <button class="sp-close" id="sp-close">✕</button>
+    </div>
+    <div class="sp-ctx">
+      <span class="sp-ctx-lbl">Application :</span>
+      <strong id="sp-ctx-val">—</strong>
+    </div>
+    <div id="sp-matches"></div>
+    <div id="sp-generate" class="sp-generate hidden">
+      <p>Aucune correspondance trouvée.</p>
+      <button class="btn-primary full" id="sp-gen-btn">⚡ Générer &amp; Sauvegarder</button>
+    </div>
+  </div>
+
+  <!-- ═══ MODALE UPGRADE ═══ -->
+  <div id="upgrade-modal" class="modal-overlay hidden">
+    <div class="modal-box upgrade-box">
+      <div class="upgrade-icon">🚀</div>
+      <h3>Limite atteinte</h3>
+      <p class="upgrade-desc">La version gratuite est limitée à <strong>3 mots de passe</strong>.<br>Passez à Kyber Premium pour en stocker un nombre illimité.</p>
+      <div class="upgrade-perks">
+        <div class="perk">✔ Mots de passe illimités</div>
+        <div class="perk">✔ Auto-fill natif multi-OS</div>
+        <div class="perk">✔ Analyse de santé avancée</div>
+        <div class="perk">✔ Mises à jour à vie</div>
+      </div>
+      <button class="btn-primary full" id="upgrade-go-btn">🌐 Voir les offres — kyber-security.fr</button>
+      <div class="field" style="margin-top:20px">
+        <label>Déjà une clé de licence ?</label>
+        <input type="text" id="upgrade-license-key" placeholder="Collez votre clé ici" />
+      </div>
+      <div class="modal-btns">
+        <button class="btn-secondary" id="upgrade-cancel">Annuler</button>
+        <button class="btn-primary" id="upgrade-activate-btn">Activer</button>
+      </div>
+      <p id="upgrade-err" class="err-text"></p>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL ENTRÉE ═══ -->
+  <div id="entry-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3 id="modal-title">Nouvelle entrée</h3>
+      <div class="field"><label>Titre / Site</label><input type="text" id="m-title" placeholder="ex: GitHub" /></div>
+      <div class="field"><label>URL <span class="field-optional">(optionnel)</span></label><input type="text" id="m-url" placeholder="https://github.com" /></div>
+      <div class="field"><label>Identifiant / Email <span class="field-optional">(optionnel)</span></label><input type="text" id="m-user" placeholder="vous@email.com" /></div>
+      <div class="field">
+        <label>Mot de passe</label>
+        <div class="input-row">
+          <input type="password" id="m-pass" placeholder="Mot de passe" />
+          <button class="icon-btn" id="m-gen-btn" title="Générer">⚡</button>
+          <button class="icon-btn" id="m-toggle-pass" title="Afficher">👁</button>
+        </div>
+        <div class="strength-row" style="margin-top:8px">
+          <div class="strength-bar"><div id="m-strength-fill" class="strength-fill"></div></div>
+          <span id="m-strength-lbl" class="strength-lbl">—</span>
+        </div>
+      </div>
+      <div class="modal-btns">
+        <button class="btn-secondary" id="m-cancel">Annuler</button>
+        <button class="btn-primary" id="m-save">Enregistrer</button>
+      </div>
+      <p id="m-err" class="err-text"></p>
+    </div>
+  </div>
+
+  <!-- ═══ MODALE MIGRATION v1→v2 ═══ -->
+  <div id="migrate-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div style="font-size:2rem;text-align:center;margin-bottom:8px">🔐</div>
+      <h3 style="text-align:center;margin-bottom:12px">Migration vers Kyber1024</h3>
+      <p style="color:var(--muted2);font-size:.88rem;margin-bottom:20px;line-height:1.6">
+        Votre coffre sera re-chiffré avec <strong>Kyber1024 + Argon2id + HKDF</strong> (format v2). Entrez votre mot de passe maître pour confirmer.
+      </p>
+      <div class="field">
+        <label>Mot de passe maître</label>
+        <input type="password" id="migrate-pass" placeholder="Confirmez votre mot de passe" />
+      </div>
+      <div class="modal-btns">
+        <button class="btn-secondary" id="migrate-cancel">Annuler</button>
+        <button class="btn-primary" id="migrate-confirm">Migrer</button>
+      </div>
+      <p id="migrate-err" class="err-text"></p>
+    </div>
+  </div>
+
+  <!-- ═══ TOAST CLIPBOARD ═══ -->
+  <div id="toast" class="toast hidden">
+    <span id="toast-msg">Copié !</span>
+    <div id="toast-bar" class="toast-bar"></div>
+  </div>
+
+</div>
+<script type="module" src="/main.js?v=2"></script>
+</body>
+</html>

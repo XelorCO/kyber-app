@@ -1,0 +1,10 @@
+[profile.release]
+strip = "symbols"
+opt-level = 3
+
+[build]
+rustflags = [
+    "--remap-path-prefix", "C:\\Users\\magic\\.cargo=/cargo",
+    "--remap-path-prefix", "C:\\Users\\magic\\.gemini=/src",
+    "--remap-path-prefix", "C:\\Users\\magic=/user",
+]

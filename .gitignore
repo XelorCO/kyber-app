@@ -1,0 +1,31 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Vite
+ui/dist/
+ui/dist-ssr/
+
+# Rust
+target/
+src-tauri/target/
+**/*.rs.bk
+
+# Vault files / test data
+.pqpassmgr/
+*.enc
+*.vault
+
+# Stray build logs
+err.txt
+src-tauri/err.txt
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# IDE
+.vscode/
+.idea/
