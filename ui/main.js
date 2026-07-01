@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { check as checkUpdate } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 // ══════════════════════════════════════════════════
 //  STATE
@@ -82,6 +84,59 @@ on('sett-activate-btn', 'click', async () => {
   const key = $('sett-license-key').value.trim();
   await activateLicenseKey(key, 'sett-license-err');
 });
+
+// ══════════════════════════════════════════════════
+//  MISES À JOUR (tauri-plugin-updater, signées)
+// ══════════════════════════════════════════════════
+let pendingUpdate = null;
+
+async function checkForUpdates(manual = false) {
+  const status = $('update-status');
+  if (manual) status.textContent = 'Recherche de mise à jour…';
+  try {
+    const update = await checkUpdate();
+    if (update) {
+      pendingUpdate = update;
+      status.textContent = `Nouvelle version ${update.version} disponible !` +
+        (update.body ? ` — ${update.body}` : '');
+      $('update-badge').classList.remove('hidden');
+      $('update-install-btn').classList.remove('hidden');
+      if (!manual) showToast(`🔔 Kyber ${update.version} est disponible — voir Paramètres`);
+    } else if (manual) {
+      status.textContent = '✅ Kyber est à jour.';
+    }
+  } catch (_) {
+    // Hors ligne ou serveur injoignable — silencieux au démarrage, explicite en manuel
+    if (manual) status.textContent = 'Vérification impossible (connexion internet requise).';
+  }
+}
+
+on('update-check-btn', 'click', () => checkForUpdates(true));
+
+on('update-install-btn', 'click', async () => {
+  if (!pendingUpdate) return;
+  const btn = $('update-install-btn');
+  const status = $('update-status');
+  btn.disabled = true;
+  try {
+    let total = 0, received = 0;
+    await pendingUpdate.downloadAndInstall((ev) => {
+      if (ev.event === 'Started') { total = ev.data.contentLength || 0; }
+      else if (ev.event === 'Progress') {
+        received += ev.data.chunkLength;
+        if (total) status.textContent = `Téléchargement… ${Math.round(received / total * 100)}%`;
+      }
+      else if (ev.event === 'Finished') { status.textContent = 'Installation…'; }
+    });
+    await relaunch();
+  } catch (e) {
+    btn.disabled = false;
+    status.textContent = 'Échec de la mise à jour : ' + (typeof e === 'string' ? e : 'réessayez plus tard.');
+  }
+});
+
+// Vérification silencieuse au démarrage (3s après lancement, non bloquant)
+setTimeout(() => checkForUpdates(false), 3000);
 
 
 function passwordStrength(pwd) {
