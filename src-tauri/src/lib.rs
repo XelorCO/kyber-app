@@ -224,7 +224,7 @@ fn add_entry(state: State<'_, AppState>, title: &str, username: &str, password: 
     let path = path_lock.as_ref().ok_or("Chemin du coffre inconnu.")?;
 
     // Freemium : limite à 3 entrées sans licence valide
-    const FREE_LIMIT: usize = 3;
+    const FREE_LIMIT: usize = 10;
     if vault_data.entries.len() >= FREE_LIMIT && license::check_license().is_err() {
         return Err("LIMIT_REACHED".to_string());
     }
@@ -476,7 +476,7 @@ fn import_csv(
     let path  = path_lock.as_ref().ok_or("Chemin du coffre inconnu.")?;
 
     let is_licensed = license::check_license().is_ok();
-    const FREE_LIMIT: usize = 3;
+    const FREE_LIMIT: usize = 10;
 
     let mut count = 0usize;
     for result in reader.records() {

@@ -567,7 +567,7 @@ $('file-input').addEventListener('change', async () => {
     showToast(`✅ ${entries.length} entrées importées`);
   } catch(e) {
     if (e === 'LIMIT_REACHED') {
-      $('import-status').textContent = '❌ Limite de 3 mots de passe atteinte. Passez à Pro pour importer davantage.';
+      $('import-status').textContent = '❌ Limite de 10 mots de passe atteinte. Passez à Pro pour importer davantage.';
       $('import-status').style.color = 'var(--red)';
       showUpgradeModal();
     } else {

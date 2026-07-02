@@ -78,5 +78,5 @@ git push
 
 ## Infos importantes
 - Licence : Ed25519, clé publique dans `src-tauri/src/license.rs` (`PUBLIC_KEY_BYTES`)
-- Version actuelle : 1.0.0
+- Version actuelle : 1.1.1
 - Windows déjà compilé : `Kyber_1.0.0_x64-setup.exe` disponible sur le site
