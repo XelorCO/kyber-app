@@ -1,0 +1,40 @@
+<svg viewBox="0 0 190 190" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Kyber Security</title>
+  <defs>
+    <linearGradient id="crystalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F8EF7"/>
+      <stop offset="50%" stop-color="#9B6EF7"/>
+      <stop offset="100%" stop-color="#F76EA8"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3A7AE8"/>
+      <stop offset="60%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F76EA8" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#4F8EF7" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="95" cy="95" r="95" fill="#252840"/>
+  <circle cx="95" cy="95" r="88" fill="none" stroke="url(#crystalGrad)" stroke-width="1" opacity="0.4"/>
+
+  <polygon points="95,3 43,73 43,117 95,145" fill="url(#shieldGrad)" opacity="0.85"/>
+  <polygon points="95,3 147,73 147,117 95,145" fill="url(#shieldGrad)" opacity="0.65"/>
+  <polygon points="43,117 95,145 95,187" fill="url(#accentGrad)" opacity="0.9"/>
+  <polygon points="147,117 95,145 95,187" fill="url(#accentGrad)" opacity="0.7"/>
+  <polygon points="43,73 43,117 95,145 95,95" fill="#7C5CE0" opacity="0.5"/>
+  <polygon points="147,73 147,117 95,145 95,95" fill="#B95ECC" opacity="0.4"/>
+  <polygon points="95,3 43,73 95,95 147,73" fill="white" opacity="0.13"/>
+  <polygon points="80,40 60,77 85,87 95,55" fill="white" opacity="0.18"/>
+
+  <polygon points="95,3 43,73 43,117 95,187 147,117 147,73" fill="none" stroke="url(#crystalGrad)" stroke-width="1.5" stroke-linejoin="round"/>
+  <line x1="43" y1="73" x2="147" y2="73" stroke="url(#crystalGrad)" stroke-width="0.8" opacity="0.7"/>
+  <line x1="43" y1="117" x2="147" y2="117" stroke="url(#crystalGrad)" stroke-width="0.8" opacity="0.5"/>
+  <line x1="95" y1="3" x2="95" y2="187" stroke="white" stroke-width="0.5" opacity="0.12"/>
+
+  <rect x="80" y="89" width="30" height="22" rx="4" fill="none" stroke="white" stroke-width="1.8" opacity="0.85"/>
+  <path d="M86,89 Q86,77 95,77 Q104,77 104,89" fill="none" stroke="white" stroke-width="1.8" opacity="0.85"/>
+  <circle cx="95" cy="100" r="3" fill="white" opacity="0.9"/>
+</svg>

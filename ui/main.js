@@ -55,7 +55,7 @@ async function activateLicenseKey(key, errElId) {
     const payload = await invoke('activate_license', { licenseKey: key });
     isLicensed = true;
     updateLicenseUI(payload);
-    showToast(`✅ Licence activée ! Bienvenue ${payload.name}`);
+    showToast(`✓ Licence activée ! Bienvenue ${payload.name}`);
     return true;
   } catch(e) {
     $(errElId).textContent = typeof e === 'string' ? e : 'Clé invalide ou format incorrect.';
@@ -89,6 +89,7 @@ on('sett-activate-btn', 'click', async () => {
 //  MISES À JOUR (tauri-plugin-updater, signées)
 // ══════════════════════════════════════════════════
 let pendingUpdate = null;
+let updateInProgress = false;
 
 async function checkForUpdates(manual = false) {
   const status = $('update-status');
@@ -98,12 +99,12 @@ async function checkForUpdates(manual = false) {
     if (update) {
       pendingUpdate = update;
       status.textContent = `Nouvelle version ${update.version} disponible !` +
-        (update.body ? ` — ${update.body}` : '');
+        (update.body ? ` / ${update.body}` : '');
       $('update-badge').classList.remove('hidden');
       $('update-install-btn').classList.remove('hidden');
-      if (!manual) showToast(`🔔 Kyber ${update.version} est disponible — voir Paramètres`);
+      if (!manual) showUpdateModal(update);
     } else if (manual) {
-      status.textContent = '✅ Kyber est à jour.';
+      status.textContent = '✓ Kyber est à jour.';
     }
   } catch (_) {
     // Hors ligne ou serveur injoignable — silencieux au démarrage, explicite en manuel
@@ -111,28 +112,60 @@ async function checkForUpdates(manual = false) {
   }
 }
 
-on('update-check-btn', 'click', () => checkForUpdates(true));
+// ── Popup de mise à jour (au démarrage) ──
+function showUpdateModal(update) {
+  $('um-version').textContent = update.version;
+  const notes = $('um-notes');
+  if (update.body) { notes.textContent = update.body; notes.classList.remove('hidden'); }
+  else notes.classList.add('hidden');
+  $('um-progress').classList.add('hidden');
+  $('um-install').disabled = false;
+  $('update-modal').classList.remove('hidden');
+}
 
-on('update-install-btn', 'click', async () => {
-  if (!pendingUpdate) return;
-  const btn = $('update-install-btn');
-  const status = $('update-status');
-  btn.disabled = true;
+function closeUpdateModal() {
+  if (updateInProgress) return; // pas de fermeture pendant le téléchargement
+  $('update-modal').classList.add('hidden');
+}
+
+// Téléchargement + installation, avec progression écrite dans un ou plusieurs éléments
+async function installUpdate(progressEls) {
+  if (!pendingUpdate || updateInProgress) return;
+  updateInProgress = true;
+  const setP = txt => progressEls.forEach(el => {
+    el.textContent = txt;
+    el.classList.remove('hidden');
+  });
   try {
     let total = 0, received = 0;
     await pendingUpdate.downloadAndInstall((ev) => {
       if (ev.event === 'Started') { total = ev.data.contentLength || 0; }
       else if (ev.event === 'Progress') {
         received += ev.data.chunkLength;
-        if (total) status.textContent = `Téléchargement… ${Math.round(received / total * 100)}%`;
+        if (total) setP(`Téléchargement… ${Math.round(received / total * 100)}%`);
       }
-      else if (ev.event === 'Finished') { status.textContent = 'Installation…'; }
+      else if (ev.event === 'Finished') { setP('Installation…'); }
     });
     await relaunch();
   } catch (e) {
-    btn.disabled = false;
-    status.textContent = 'Échec de la mise à jour : ' + (typeof e === 'string' ? e : 'réessayez plus tard.');
+    updateInProgress = false;
+    setP('Échec de la mise à jour : ' + (typeof e === 'string' ? e : 'réessayez plus tard.'));
+    $('um-install').disabled = false;
+    $('update-install-btn').disabled = false;
   }
+}
+
+on('update-check-btn', 'click', () => checkForUpdates(true));
+
+on('update-install-btn', 'click', () => {
+  $('update-install-btn').disabled = true;
+  installUpdate([$('update-status')]);
+});
+
+on('um-later', 'click', closeUpdateModal);
+on('um-install', 'click', () => {
+  $('um-install').disabled = true;
+  installUpdate([$('um-progress'), $('update-status')]);
 });
 
 // Vérification silencieuse au démarrage (3s après lancement, non bloquant)
@@ -193,10 +226,10 @@ function showToast(msg, duration = 3000) {
 async function copySecure(text, label = 'Copié !') {
   try {
     await invoke('copy_secure', { text });
-    showToast(`📋 ${label} — Effacé dans 30s`, 3000);
+    showToast(`⧉ ${label} / Effacé dans 30s`, 3000);
   } catch {
     await navigator.clipboard.writeText(text);
-    showToast(`📋 ${label}`);
+    showToast(`⧉ ${label}`);
   }
 }
 
@@ -325,7 +358,7 @@ function renderVault(filter = '') {
   filtered.forEach(entry => {
     const card = document.createElement('div');
     card.className = 'entry-card';
-    const icon = entry.url ? letterIcon(entry.url) : { letter: '🔑', bg: '#6366F1' };
+    const icon = entry.url ? letterIcon(entry.url) : { letter: '◆', bg: '#6366F1' };
     card.innerHTML = `
       <div class="ec-head">
         <div class="ec-favicon">
@@ -338,7 +371,7 @@ function renderVault(filter = '') {
       </div>
       <div class="ec-pass-row">
         <span class="ec-pass" id="ep-${escapeHtml(entry.id)}">••••••••••••</span>
-        <button class="icon-btn" title="Afficher" data-action="reveal" data-id="${escapeHtml(entry.id)}">👁</button>
+        <button class="icon-btn" title="Afficher" data-action="reveal" data-id="${escapeHtml(entry.id)}">◉</button>
       </div>
       <div class="ec-url" title="${escapeHtml(entry.url)}">${escapeHtml(domainFromUrl(entry.url)) || '—'}</div>
       <div class="ec-actions">
@@ -501,11 +534,11 @@ function renderHealthList(h) {
       <span class="hi-tag ${tag}">${label}</span>`;
     list.appendChild(el);
   };
-  h.weak.forEach(e => add(e, 'weak', '⚠️ Faible'));
-  h.duplicates.forEach(e => add(e, 'dupe', '🔄 Doublon'));
-  h.old.forEach(e => add(e, 'old', '📅 Ancien'));
+  h.weak.forEach(e => add(e, 'weak', '⚠︎ Faible'));
+  h.duplicates.forEach(e => add(e, 'dupe', '↻ Doublon'));
+  h.old.forEach(e => add(e, 'old', '● Ancien'));
   if (!list.children.length) {
-    list.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">✅ Coffre en parfaite santé !</p>';
+    list.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">✓ Coffre en parfaite santé !</p>';
   }
 }
 
@@ -533,13 +566,13 @@ on('export-csv-btn', 'click', async () => {
     a.download = `kyber-export-${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    $('export-status').textContent = '✅ Export téléchargé.';
+    $('export-status').textContent = '✓ Export téléchargé.';
     $('export-status').style.color = 'var(--green)';
   } catch(e) {
     if (e === 'PRO_REQUIRED') {
       showUpgradeModal();
     } else {
-      $('export-status').textContent = '❌ ' + e;
+      $('export-status').textContent = '✗ ' + e;
       $('export-status').style.color = 'var(--red)';
     }
   }
@@ -562,16 +595,16 @@ $('file-input').addEventListener('change', async () => {
     entries = await invoke('import_csv', { csv_content, format: importFormat });
     renderVault();
     updateHealthBadge();
-    $('import-status').textContent = `✅ ${entries.length} entrées importées avec succès.`;
+    $('import-status').textContent = `✓ ${entries.length} entrées importées avec succès.`;
     $('import-status').style.color = 'var(--green)';
-    showToast(`✅ ${entries.length} entrées importées`);
+    showToast(`✓ ${entries.length} entrées importées`);
   } catch(e) {
     if (e === 'LIMIT_REACHED') {
-      $('import-status').textContent = '❌ Limite de 10 mots de passe atteinte. Passez à Pro pour importer davantage.';
+      $('import-status').textContent = '✗ Limite de 10 mots de passe atteinte. Passez à Pro pour importer davantage.';
       $('import-status').style.color = 'var(--red)';
       showUpgradeModal();
     } else {
-      $('import-status').textContent = '❌ ' + e;
+      $('import-status').textContent = '✗ ' + e;
       $('import-status').style.color = 'var(--red)';
     }
   }
@@ -627,7 +660,7 @@ listen('scanner-detected', event => {
         </div>
         <div class="sp-match-btns">
           <button class="sp-autofill" data-id="${escapeHtml(m.id)}">Auto-remplir</button>
-          <button class="sp-copy" data-id="${escapeHtml(m.id)}">📋</button>
+          <button class="sp-copy" data-id="${escapeHtml(m.id)}">⧉</button>
         </div>`;
 
       // Auto-fill : ferme popup + délai + tape le mdp (lookup depuis entries)
@@ -689,10 +722,10 @@ on('encrypt-file-btn', 'click', async () => {
 
   try {
     await invoke('encrypt_file_cmd', { sourcePath: src, destPath });
-    setFileStatus(`✅ Fichier chiffré → ${destPath}`);
-    showToast('✅ Fichier chiffré avec succès');
+    setFileStatus(`✓ Fichier chiffré → ${destPath}`);
+    showToast('✓ Fichier chiffré avec succès');
   } catch(e) {
-    setFileStatus('❌ ' + e, true);
+    setFileStatus('✗ ' + e, true);
   }
 });
 
@@ -716,10 +749,10 @@ on('encrypt-folder-btn', 'click', async () => {
 
   try {
     await invoke('encrypt_folder_cmd', { folderPath: src, destPath });
-    setFileStatus(`✅ Dossier chiffré → ${destPath}`);
-    showToast('✅ Dossier chiffré avec succès');
+    setFileStatus(`✓ Dossier chiffré → ${destPath}`);
+    showToast('✓ Dossier chiffré avec succès');
   } catch(e) {
-    setFileStatus('❌ ' + e, true);
+    setFileStatus('✗ ' + e, true);
   }
 });
 
@@ -737,10 +770,10 @@ on('decrypt-file-btn', 'click', async () => {
 
   try {
     const result = await invoke('decrypt_file_cmd', { sourcePath: src, destDir });
-    setFileStatus(`✅ "${result.name}" restauré → ${result.path}`);
-    showToast(`✅ "${result.name}" déchiffré`);
+    setFileStatus(`✓ "${result.name}" restauré → ${result.path}`);
+    showToast(`✓ "${result.name}" déchiffré`);
   } catch(e) {
-    setFileStatus('❌ ' + e, true);
+    setFileStatus('✗ ' + e, true);
   }
 });
 
@@ -753,10 +786,10 @@ async function checkVaultVersion() {
     const isV1 = await invoke('is_vault_v1', { path: vaultPath });
     if (isV1) {
       $('migrate-banner').classList.remove('hidden');
-      $('sett-vault-version').textContent = '⚠️ Format v1 — Argon2id seul (sans Kyber1024)';
+      $('sett-vault-version').textContent = '⚠︎ Format v1 / Argon2id seul (sans Kyber1024)';
       $('sett-vault-version').style.color = 'var(--yellow)';
     } else {
-      $('sett-vault-version').textContent = '✅ Format v2 — Kyber1024 + Argon2id + HKDF';
+      $('sett-vault-version').textContent = '✓ Format v2 / Kyber1024 + Argon2id + HKDF';
       $('sett-vault-version').style.color = 'var(--green)';
     }
   } catch { /* silent */ }
@@ -782,7 +815,7 @@ on('migrate-confirm', 'click', async () => {
     await invoke('migrate_to_v2', { password });
     $('migrate-modal').classList.add('hidden');
     $('migrate-banner').classList.add('hidden');
-    showToast('✅ Coffre migré vers Kyber1024 (v2) — Protection post-quantique activée !', 6000);
+    showToast('✓ Coffre migré vers Kyber1024 (v2) / Protection post-quantique activée !', 6000);
   } catch(e) {
     $('migrate-err').textContent = typeof e === 'string' ? e : 'Erreur lors de la migration.';
   } finally {
@@ -798,6 +831,7 @@ document.addEventListener('keydown', e => {
   if (!$('entry-modal').classList.contains('hidden')) { closeEntryModal(); return; }
   if (!$('upgrade-modal').classList.contains('hidden')) { $('upgrade-modal').classList.add('hidden'); return; }
   if (!$('migrate-modal').classList.contains('hidden')) { $('migrate-modal').classList.add('hidden'); return; }
+  if (!$('update-modal').classList.contains('hidden')) { closeUpdateModal(); return; }
   if (!$('scan-popup').classList.contains('hidden')) { $('scan-popup').classList.add('hidden'); }
 });
 
@@ -805,6 +839,7 @@ document.addEventListener('keydown', e => {
 $('entry-modal').addEventListener('click', e => { if (e.target === $('entry-modal')) closeEntryModal(); });
 $('upgrade-modal').addEventListener('click', e => { if (e.target === $('upgrade-modal')) $('upgrade-modal').classList.add('hidden'); });
 $('migrate-modal').addEventListener('click', e => { if (e.target === $('migrate-modal')) $('migrate-modal').classList.add('hidden'); });
+$('update-modal').addEventListener('click', e => { if (e.target === $('update-modal')) closeUpdateModal(); });
 
 // Bouton "Générer & Sauvegarder" dans la popup
 on('sp-gen-btn', 'click', async () => {
