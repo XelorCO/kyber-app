@@ -343,23 +343,11 @@ $('master-pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('lo
 // ══════════════════════════════════════════════════
 //  VAULT — Render
 // ══════════════════════════════════════════════════
-function renderVault(filter = '') {
-  const grid = $('entries-grid');
-  const filtered = filter
-    ? entries.filter(e =>
-        e.title.toLowerCase().includes(filter) ||
-        e.username.toLowerCase().includes(filter) ||
-        e.url.toLowerCase().includes(filter))
-    : entries;
-
-  grid.innerHTML = '';
-  $('vault-empty').classList.toggle('hidden', filtered.length > 0);
-
-  filtered.forEach(entry => {
-    const card = document.createElement('div');
-    card.className = 'entry-card';
-    const icon = entry.url ? letterIcon(entry.url) : { letter: '◆', bg: '#6366F1' };
-    card.innerHTML = `
+// Construction du HTML d'une carte (string pure — assemblée en un seul innerHTML)
+function entryCardHtml(entry) {
+  const icon = entry.url ? letterIcon(entry.url) : { letter: '◆', bg: '#6366F1' };
+  const id = escapeHtml(entry.id);
+  return `<div class="entry-card">
       <div class="ec-head">
         <div class="ec-favicon">
           <span class="ec-favicon-letter" style="background:${escapeHtml(icon.bg)}">${escapeHtml(icon.letter)}</span>
@@ -370,53 +358,73 @@ function renderVault(filter = '') {
         </div>
       </div>
       <div class="ec-pass-row">
-        <span class="ec-pass" id="ep-${escapeHtml(entry.id)}">••••••••••••</span>
-        <button class="icon-btn" title="Afficher" data-action="reveal" data-id="${escapeHtml(entry.id)}">◉</button>
+        <span class="ec-pass" id="ep-${id}">••••••••••••</span>
+        <button class="icon-btn" title="Afficher" data-action="reveal" data-id="${id}">◉</button>
       </div>
       <div class="ec-url" title="${escapeHtml(entry.url)}">${escapeHtml(domainFromUrl(entry.url)) || '—'}</div>
       <div class="ec-actions">
-        <button class="ec-btn" data-action="copy-user" data-id="${escapeHtml(entry.id)}">Copier ID</button>
-        <button class="ec-btn" data-action="copy-pass" data-id="${escapeHtml(entry.id)}">Copier MDP</button>
-        <button class="ec-btn" data-action="edit" data-id="${escapeHtml(entry.id)}">Modifier</button>
-        <button class="ec-btn danger" data-action="delete" data-id="${escapeHtml(entry.id)}" data-title="${escapeHtml(entry.title)}">Suppr.</button>
-      </div>`;
-    grid.appendChild(card);
-  });
-
-  // Délégation d'événements — lookup par id dans le tableau entries (pas de JSON dans le DOM)
-  grid.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const action = btn.dataset.action;
-      const id = btn.dataset.id;
-      const entry = entries.find(e => e.id === id);
-
-      if (action === 'reveal') {
-        const span = $(`ep-${id}`);
-        if (!span) return;
-        span.textContent = span.textContent.includes('•') ? (entry?.password ?? '') : '••••••••••••';
-      }
-      else if (action === 'copy-user') {
-        if (entry) await copySecure(entry.username, 'Identifiant copié');
-      }
-      else if (action === 'copy-pass') {
-        if (entry) await copySecure(entry.password, 'Mot de passe copié');
-      }
-      else if (action === 'edit') {
-        if (entry) openEntryModal(entry);
-      }
-      else if (action === 'delete') {
-        if (!confirm(`Supprimer "${btn.dataset.title}" ?`)) return;
-        try {
-          entries = await invoke('delete_entry', { id });
-          renderVault($('search-input').value.toLowerCase());
-        } catch(e) { alert(e); }
-      }
-    });
-  });
+        <button class="ec-btn" data-action="copy-user" data-id="${id}">Copier ID</button>
+        <button class="ec-btn" data-action="copy-pass" data-id="${id}">Copier MDP</button>
+        <button class="ec-btn" data-action="edit" data-id="${id}">Modifier</button>
+        <button class="ec-btn danger" data-action="delete" data-id="${id}" data-title="${escapeHtml(entry.title)}">Suppr.</button>
+      </div>
+    </div>`;
 }
 
-// Search
-on('search-input', 'input', () => renderVault($('search-input').value.toLowerCase().trim()));
+function renderVault(filter = '') {
+  const grid = $('entries-grid');
+  const filtered = filter
+    ? entries.filter(e =>
+        e.title.toLowerCase().includes(filter) ||
+        e.username.toLowerCase().includes(filter) ||
+        e.url.toLowerCase().includes(filter))
+    : entries;
+
+  $('vault-empty').classList.toggle('hidden', filtered.length > 0);
+  // Un seul set innerHTML => un seul reflow (au lieu de N appendChild) et zéro
+  // ré-attachement de listeners (la délégation ci-dessous s'en charge une fois pour toutes).
+  grid.innerHTML = filtered.map(entryCardHtml).join('');
+}
+
+// Délégation d'événements — UN listener attaché une seule fois sur la grille.
+// Lookup par id dans le tableau `entries` (pas de JSON dans le DOM).
+$('entries-grid').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+  const entry = entries.find(e => e.id === id);
+
+  if (action === 'reveal') {
+    const span = $(`ep-${id}`);
+    if (!span) return;
+    span.textContent = span.textContent.includes('•') ? (entry?.password ?? '') : '••••••••••••';
+  }
+  else if (action === 'copy-user') {
+    if (entry) await copySecure(entry.username, 'Identifiant copié');
+  }
+  else if (action === 'copy-pass') {
+    if (entry) await copySecure(entry.password, 'Mot de passe copié');
+  }
+  else if (action === 'edit') {
+    if (entry) openEntryModal(entry);
+  }
+  else if (action === 'delete') {
+    if (!confirm(`Supprimer "${btn.dataset.title}" ?`)) return;
+    try {
+      entries = await invoke('delete_entry', { id });
+      renderVault($('search-input').value.toLowerCase().trim());
+    } catch(e) { alert(e); }
+  }
+});
+
+// Search — débounce léger : une frappe rapide ne déclenche qu'un seul rendu
+let searchTimer;
+on('search-input', 'input', () => {
+  const val = $('search-input').value.toLowerCase().trim();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => renderVault(val), 80);
+});
 
 // ══════════════════════════════════════════════════
 //  ENTRY MODAL (Add / Edit)

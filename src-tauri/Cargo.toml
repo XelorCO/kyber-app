@@ -82,3 +82,11 @@ objc2-app-kit = { version = "0.2", features = ["NSWorkspace", "NSRunningApplicat
 [target.'cfg(target_os = "linux")'.dependencies]
 atspi = "0.19"
 futures-util = "0.3"
+
+# Binaire de distribution : plus rapide + plus léger (n'affecte que `cargo tauri build`)
+[profile.release]
+opt-level = 3          # code le plus rapide (crypto, IPC)
+lto = true             # link-time optimization inter-crates
+codegen-units = 1      # meilleure optimisation au prix d'un build plus long
+panic = "abort"        # pas de tables de déroulement -> binaire plus petit
+strip = true           # retire les symboles de debug
