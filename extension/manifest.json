@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Kyber — Coffre-Fort Post-Quantique",
+  "version": "0.3.1",
+  "description": "Beta : se connecte automatiquement à votre coffre déjà ouvert dans l'app Kyber pour remplir vos identifiants dans le navigateur, sans redemander le mot de passe.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwtZZOZHd88DZKS6PT4QMrD2wUsY4W2F80B5wfZK6Ju2J6Zb1ycYpgCZltAxQtmDXUnR/4CtDPD3Fz7VqA0xgHFGvf/pCMJ5SHiivwiyZCmK4kwsg42Cq6CmtM7b0cVsY0F1krCbsMRohC0FCyMe+DdSYmRp+oHsnDkD3idlTfCGOF+Yx4tjiSAom3Nf5eKvtkIfz3f+OjPMvsQ4r1lXLy8PV5b26vPp5hUipLEYaZrbNU9dEEt/B/iJtzjx+nfqsqYIOCkVhBETtPyUlgqM/XJa7yPB4WpqrVfLtkWQoKI90PzEO7qhgpOZ0qXuKoNBmsxT6SLSPx6M/DRq9mVsxbQIDAQAB",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["nativeMessaging", "activeTab", "scripting", "storage", "alarms"],
+  "minimum_chrome_version": "102"
+}

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kyber / Coffre-Fort Post-Quantique</title>
   <meta name="description" content="Kyber / Le premier gestionnaire de mots de passe post-quantique français. Zéro cloud, zéro abonnement." />
-  <link rel="stylesheet" href="/style.css?v=6">
+  <link rel="stylesheet" href="/style.css?v=7">
 </head>
 <body>
 <div id="app">
@@ -77,6 +77,9 @@
           <span class="ni">§</span><span>Paramètres</span>
         </a>
       </nav>
+      <a href="#" class="nav-item nav-lock" id="nav-lock" title="Verrouiller le coffre (purge la mémoire et coupe l'extension navigateur)">
+        <span class="ni">⚿</span><span>Verrouiller</span>
+      </a>
       <div class="sb-scanner" id="scanner-indicator">
         <div class="scan-dot"></div>
         <span id="scanner-label">Scanner actif</span>
@@ -287,6 +290,16 @@
     <div id="sp-matches"></div>
     <div id="sp-generate" class="sp-generate hidden">
       <p>Aucune correspondance trouvée.</p>
+      <div class="slider-row">
+        <label>Longueur : <strong id="sp-len-val">32</strong> caractères</label>
+        <input type="range" id="sp-gen-len" min="8" max="64" value="32" />
+      </div>
+      <div class="checkboxes">
+        <label class="cb-label"><input type="checkbox" id="sp-opt-upper" checked /> Majuscules</label>
+        <label class="cb-label"><input type="checkbox" id="sp-opt-lower" checked /> Minuscules</label>
+        <label class="cb-label"><input type="checkbox" id="sp-opt-digits" checked /> Chiffres</label>
+        <label class="cb-label"><input type="checkbox" id="sp-opt-symbols" checked /> Symboles</label>
+      </div>
       <button class="btn-primary full" id="sp-gen-btn">✦ Générer &amp; Sauvegarder</button>
     </div>
   </div>
@@ -296,7 +309,7 @@
     <div class="modal-box upgrade-box">
       <div class="upgrade-icon">★</div>
       <h3>Limite atteinte</h3>
-      <p class="upgrade-desc">La version gratuite est limitée à <strong>10 mots de passe</strong>.<br>Passez à Kyber Premium pour en stocker un nombre illimité.</p>
+      <p class="upgrade-desc" id="upgrade-desc">La version gratuite est limitée à <strong>10 mots de passe</strong>.<br>Passez à Kyber Premium pour en stocker un nombre illimité.</p>
       <div class="upgrade-perks">
         <div class="perk">✓ Mots de passe illimités</div>
         <div class="perk">✓ Auto-fill natif multi-OS</div>
@@ -327,12 +340,25 @@
         <label>Mot de passe</label>
         <div class="input-row">
           <input type="password" id="m-pass" placeholder="Mot de passe" />
-          <button class="icon-btn" id="m-gen-btn" title="Générer">✦</button>
+          <button class="icon-btn" id="m-gen-btn" title="Options de génération">✦</button>
           <button class="icon-btn" id="m-toggle-pass" title="Afficher">◉</button>
         </div>
         <div class="strength-row" style="margin-top:8px">
           <div class="strength-bar"><div id="m-strength-fill" class="strength-fill"></div></div>
           <span id="m-strength-lbl" class="strength-lbl">—</span>
+        </div>
+        <div id="m-gen-opts" class="gen-opts hidden" style="margin-top:14px;margin-bottom:0">
+          <div class="slider-row">
+            <label>Longueur : <strong id="m-len-val">24</strong> caractères</label>
+            <input type="range" id="m-gen-len" min="8" max="64" value="24" />
+          </div>
+          <div class="checkboxes">
+            <label class="cb-label"><input type="checkbox" id="m-opt-upper" checked /> Majuscules (A-Z)</label>
+            <label class="cb-label"><input type="checkbox" id="m-opt-lower" checked /> Minuscules (a-z)</label>
+            <label class="cb-label"><input type="checkbox" id="m-opt-digits" checked /> Chiffres (0-9)</label>
+            <label class="cb-label"><input type="checkbox" id="m-opt-symbols" checked /> Symboles (!@#…)</label>
+          </div>
+          <button class="btn-primary full" id="m-gen-confirm">✦ Générer</button>
         </div>
       </div>
       <div class="modal-btns">
@@ -385,6 +411,6 @@
   </div>
 
 </div>
-<script type="module" src="/main.js?v=4"></script>
+<script type="module" src="/main.js?v=5"></script>
 </body>
 </html>

@@ -114,6 +114,12 @@ body{background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;}
 }
 .ni{font-size:1rem;width:18px;text-align:center;}
 
+/* Verrouillage manuel : action, pas une vue — teinte rouge au survol pour
+   signaler qu'on quitte la session. */
+.nav-lock{margin-top:auto;border-top:1px solid var(--border);border-radius:0;padding-top:12px;}
+.nav-lock:hover{background:rgba(248,113,113,.08);color:var(--red);}
+.nav-lock:hover .ni{color:var(--red);}
+
 .sb-scanner{
   display:flex;align-items:center;gap:9px;
   background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);

@@ -3,11 +3,13 @@ pub mod scanner;
 pub mod vault;
 pub mod license;
 pub mod filelock;
+pub mod session_bridge;
 
 use std::fs;
 use std::path::PathBuf;
 use tauri::State;
 use std::sync::Mutex;
+use session_bridge::SessionBridge;
 use vault::{VaultData, VaultEntry, EncryptedVault, EncryptedVaultV2, V2_MAGIC};
 
 struct AppState {
@@ -19,6 +21,18 @@ struct AppState {
 #[tauri::command]
 fn check_vault_exists(path: &str) -> bool {
     PathBuf::from(path).exists()
+}
+
+/// Verrouille le coffre : purge les données déchiffrées et la clé maître de
+/// la mémoire (MasterKey est ZeroizeOnDrop) et coupe la session servie à
+/// l'extension navigateur. L'utilisateur devra re-saisir son mot de passe.
+#[tauri::command]
+fn lock_vault(state: State<'_, AppState>, bridge: State<'_, SessionBridge>) {
+    *state.vault_data.lock().unwrap() = None;
+    *state.master_key.lock().unwrap() = None;
+    *state.vault_path.lock().unwrap() = None;
+    bridge.clear_entries();
+    log::info!("Coffre verrouillé (mémoire purgée, session extension coupée).");
 }
 
 // ── Persistance du dernier chemin de coffre ───────────────────────────────
@@ -74,7 +88,7 @@ fn get_default_vault_path() -> String {
 }
 
 #[tauri::command]
-fn unlock_vault(state: State<'_, AppState>, password: &str, path: &str) -> Result<Vec<VaultEntry>, String> {
+fn unlock_vault(state: State<'_, AppState>, bridge: State<'_, SessionBridge>, password: &str, path: &str) -> Result<Vec<VaultEntry>, String> {
     log::info!("Tentative de déverrouillage du coffre à : {}", path);
     let vault_path = PathBuf::from(path);
     
@@ -115,13 +129,14 @@ fn unlock_vault(state: State<'_, AppState>, password: &str, path: &str) -> Resul
     *state.vault_data.lock().unwrap() = Some(dec_vault);
     *state.master_key.lock().unwrap() = Some(mk);
     save_last_vault_path(&vault_path);
+    bridge.set_entries(entries.clone());
 
     log::info!("Coffre déverrouillé avec succès !");
     Ok(entries)
 }
 
 #[tauri::command]
-fn init_vault(state: State<'_, AppState>, password: &str, path: &str) -> Result<Vec<VaultEntry>, String> {
+fn init_vault(state: State<'_, AppState>, bridge: State<'_, SessionBridge>, password: &str, path: &str) -> Result<Vec<VaultEntry>, String> {
     use rand_core::{OsRng, RngCore};
     log::info!("Création d'un nouveau coffre à : {}", path);
     let vault_path = PathBuf::from(path);
@@ -168,6 +183,7 @@ fn init_vault(state: State<'_, AppState>, password: &str, path: &str) -> Result<
     *state.master_key.lock().unwrap() = Some(final_key);
     save_last_vault_path(&vault_path);
     register_vault(&vault_path);
+    bridge.set_entries(vec![]);
 
     log::info!("Nouveau coffre initialisé avec succès.");
     Ok(vec![])
@@ -214,7 +230,7 @@ fn save_vault(path: &PathBuf, mk: &crypto::MasterKey, vault_data: &VaultData) ->
 }
 
 #[tauri::command]
-fn add_entry(state: State<'_, AppState>, title: &str, username: &str, password: &str, url: &str) -> Result<Vec<VaultEntry>, String> {
+fn add_entry(state: State<'_, AppState>, bridge: State<'_, SessionBridge>, title: &str, username: &str, password: &str, url: &str) -> Result<Vec<VaultEntry>, String> {
     let mut vault_data_lock = state.vault_data.lock().unwrap();
     let mk_lock = state.master_key.lock().unwrap();
     let path_lock = state.vault_path.lock().unwrap();
@@ -249,11 +265,13 @@ fn add_entry(state: State<'_, AppState>, title: &str, username: &str, password: 
 
     vault_data.entries.insert(entry.id.clone(), entry);
     save_vault(path, mk, vault_data)?;
-    Ok(vault_data.entries.values().cloned().collect())
+    let entries: Vec<VaultEntry> = vault_data.entries.values().cloned().collect();
+    bridge.set_entries(entries.clone());
+    Ok(entries)
 }
 
 #[tauri::command]
-fn delete_entry(state: State<'_, AppState>, id: &str) -> Result<Vec<VaultEntry>, String> {
+fn delete_entry(state: State<'_, AppState>, bridge: State<'_, SessionBridge>, id: &str) -> Result<Vec<VaultEntry>, String> {
     let mut vault_data_lock = state.vault_data.lock().unwrap();
     let mk_lock = state.master_key.lock().unwrap();
     let path_lock = state.vault_path.lock().unwrap();
@@ -266,12 +284,15 @@ fn delete_entry(state: State<'_, AppState>, id: &str) -> Result<Vec<VaultEntry>,
         return Err(format!("Entrée '{}' introuvable.", id));
     }
     save_vault(path, mk, vault_data)?;
-    Ok(vault_data.entries.values().cloned().collect())
+    let entries: Vec<VaultEntry> = vault_data.entries.values().cloned().collect();
+    bridge.set_entries(entries.clone());
+    Ok(entries)
 }
 
 #[tauri::command]
 fn update_entry(
     state: State<'_, AppState>,
+    bridge: State<'_, SessionBridge>,
     id: &str,
     title: &str,
     username: &str,
@@ -301,7 +322,9 @@ fn update_entry(
         .as_secs();
 
     save_vault(path, mk, vault_data)?;
-    Ok(vault_data.entries.values().cloned().collect())
+    let entries: Vec<VaultEntry> = vault_data.entries.values().cloned().collect();
+    bridge.set_entries(entries.clone());
+    Ok(entries)
 }
 
 // ── Auto-fill natif (enigo) ────────────────────────────────────
@@ -416,6 +439,7 @@ fn get_vault_health(state: State<'_, AppState>) -> Result<HealthReport, String> 
 #[tauri::command]
 fn import_csv(
     state: State<'_, AppState>,
+    bridge: State<'_, SessionBridge>,
     csv_content: String,
     format: String,
 ) -> Result<Vec<VaultEntry>, String> {
@@ -509,7 +533,9 @@ fn import_csv(
     save_vault(path, mk, vault)?;
 
     log::info!("[IMPORT] {} entrées importées ({})", count, format);
-    Ok(vault.entries.values().cloned().collect())
+    let entries: Vec<VaultEntry> = vault.entries.values().cloned().collect();
+    bridge.set_entries(entries.clone());
+    Ok(entries)
 }
 
 
@@ -642,8 +668,10 @@ pub fn run() {
             vault_data: Mutex::new(None),
             master_key: Mutex::new(None),
         })
+        .manage(session_bridge::start())
         .invoke_handler(tauri::generate_handler![
             check_vault_exists,
+            lock_vault,
             unlock_vault,
             init_vault,
             generate_password,

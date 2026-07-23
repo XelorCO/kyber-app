@@ -100,6 +100,7 @@ pub fn decrypt_vault_payload(master_key: &MasterKey, nonce_bytes: &[u8; 12], cip
 // Utilisé pour le partage ou la récupération de clés.
 pub struct HybridKeyPair {
     pub pq_pk: pqcrypto_kyber::kyber1024::PublicKey,
+    #[allow(dead_code)] // réservé pour le partage hybride (pas encore câblé)
     pq_sk: pqcrypto_kyber::kyber1024::SecretKey,  // privé — ne pas exposer ni sérialiser
     pub cl_sk: EphemeralSecret,
     pub cl_pk: PublicKey,

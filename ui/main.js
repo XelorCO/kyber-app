@@ -64,7 +64,13 @@ async function activateLicenseKey(key, errElId) {
 }
 
 // ── Modale Upgrade ─────────────────────────────────────────────────────
-function showUpgradeModal() {
+// `reason` adapte le message : 'entries' (limite de mots de passe, défaut)
+// ou 'vaults' (limite de coffres) — les deux limites déclenchent la même
+// modale mais ne doivent pas afficher le même texte.
+function showUpgradeModal(reason = 'entries') {
+  $('upgrade-desc').innerHTML = reason === 'vaults'
+    ? 'La version gratuite est limitée à <strong>1 coffre</strong>.<br>Passez à Kyber Premium pour créer autant de coffres que vous voulez.'
+    : 'La version gratuite est limitée à <strong>10 mots de passe</strong>.<br>Passez à Kyber Premium pour en stocker un nombre illimité.';
   $('upgrade-license-key').value = '';
   $('upgrade-err').textContent = '';
   $('upgrade-modal').classList.remove('hidden');
@@ -247,9 +253,28 @@ document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', e => {
     e.preventDefault();
     const v = item.dataset.view;
+    if (!v) return; // items d'action (ex: Verrouiller) gérés séparément
     switchView(v);
     if (v === 'view-health') loadHealth();
   });
+});
+
+// ── Verrouillage manuel ────────────────────────────────────────────────
+// Purge le coffre déchiffré et la clé maître côté Rust (et coupe la session
+// servie à l'extension navigateur), puis revient à l'écran de connexion.
+on('nav-lock', 'click', async e => {
+  e.preventDefault();
+  try { await invoke('lock_vault'); } catch (_) {}
+  entries = [];
+  isUnlocked = false;
+  editingId = null;
+  $('master-pass').value = '';
+  $('login-err').textContent = '';
+  switchView('view-vault');
+  $('screen-app').classList.remove('active');
+  $('screen-login').classList.add('active');
+  setLoginMode('open');
+  $('master-pass').focus();
 });
 
 // ══════════════════════════════════════════════════
@@ -332,7 +357,7 @@ on('login-btn', 'click', async () => {
     }
     else if (e === 'VAULT_LIMIT_REACHED') {
       $('login-err').textContent = '';
-      showUpgradeModal();
+      showUpgradeModal('vaults');
     }
     else $('login-err').textContent = e;
   }
@@ -435,13 +460,23 @@ on('m-toggle-pass', 'click', () => {
   const inp = $('m-pass');
   inp.type = inp.type === 'password' ? 'text' : 'password';
 });
-on('m-gen-btn', 'click', async () => {
+on('m-gen-btn', 'click', () => {
+  $('m-gen-opts').classList.toggle('hidden');
+});
+on('m-gen-len', 'input', () => { $('m-len-val').textContent = $('m-gen-len').value; });
+on('m-gen-confirm', 'click', async () => {
+  const length  = parseInt($('m-gen-len').value);
+  const upper   = $('m-opt-upper').checked;
+  const lower   = $('m-opt-lower').checked;
+  const digits  = $('m-opt-digits').checked;
+  const symbols = $('m-opt-symbols').checked;
   try {
-    const p = await invoke('generate_password_options', {length:24,upper:true,lower:true,digits:true,symbols:true});
+    const p = await invoke('generate_password_options', { length, upper, lower, digits, symbols });
     $('m-pass').value = p;
     $('m-pass').type = 'text';
     renderStrength(passwordStrength(p), 'm-strength-fill', 'm-strength-lbl');
-  } catch(e) { console.error(e); }
+    $('m-gen-opts').classList.add('hidden');
+  } catch(e) { $('m-err').textContent = e; }
 });
 $('m-pass').addEventListener('input', () => {
   renderStrength(passwordStrength($('m-pass').value), 'm-strength-fill', 'm-strength-lbl');
@@ -456,6 +491,7 @@ function openEntryModal(entry) {
   $('m-pass').value     = entry?.password ?? '';
   $('m-pass').type      = 'password';
   $('m-err').textContent = '';
+  $('m-gen-opts').classList.add('hidden');
   renderStrength(passwordStrength($('m-pass').value), 'm-strength-fill', 'm-strength-lbl');
   $('entry-modal').classList.remove('hidden');
 }
@@ -850,9 +886,15 @@ $('migrate-modal').addEventListener('click', e => { if (e.target === $('migrate-
 $('update-modal').addEventListener('click', e => { if (e.target === $('update-modal')) closeUpdateModal(); });
 
 // Bouton "Générer & Sauvegarder" dans la popup
+on('sp-gen-len', 'input', () => { $('sp-len-val').textContent = $('sp-gen-len').value; });
 on('sp-gen-btn', 'click', async () => {
+  const length  = parseInt($('sp-gen-len').value);
+  const upper   = $('sp-opt-upper').checked;
+  const lower   = $('sp-opt-lower').checked;
+  const digits  = $('sp-opt-digits').checked;
+  const symbols = $('sp-opt-symbols').checked;
   try {
-    const p = await invoke('generate_password_options', {length:32,upper:true,lower:true,digits:true,symbols:true});
+    const p = await invoke('generate_password_options', { length, upper, lower, digits, symbols });
     const ctx = $('sp-ctx-val').textContent.trim();
     $('scan-popup').classList.add('hidden');
     // Utilise le nom complet de l'app comme titre ; URL laissée vide (optionnelle)

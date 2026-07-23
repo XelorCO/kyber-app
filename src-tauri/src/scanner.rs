@@ -91,6 +91,7 @@ mod windows_impl {
                             return;
                         }
 
+                        log::info!("[SCANNER] Windows — champ password détecté dans '{}'", title);
                         let _ = app.emit("scanner-detected", ScanPayload { context: title });
                     }
                 }
@@ -117,6 +118,7 @@ mod windows_impl {
                 log::error!("[SCANNER] SetWinEventHook échoué");
                 return;
             }
+            log::info!("[SCANNER] Hook Windows actif, boucle de messages démarrée.");
 
             let mut msg = MSG::default();
             while GetMessageW(&mut msg, HWND::default(), 0, 0).into() {

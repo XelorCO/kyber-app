@@ -15,6 +15,12 @@ default-run = "Kyber"
 name = "Kyber"
 path = "src/main.rs"
 
+# Hôte de native messaging pour l'extension navigateur (beta) : réutilise
+# app_lib (même crypto/vault/license que l'app), parle JSON sur stdin/stdout.
+[[bin]]
+name = "kyber-native-host"
+path = "src/bin/native_host.rs"
+
 [lib]
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
