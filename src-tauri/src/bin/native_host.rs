@@ -74,6 +74,16 @@ fn get_last_vault_path() -> String {
     std::fs::read_to_string(p).unwrap_or_default().trim().to_string()
 }
 
+// L'extension navigateur est réservée aux licences payantes (Pro / Famille /
+// Équipe) : la version gratuite reste pleinement utilisable dans l'app de
+// bureau, mais ne donne pas accès au compagnon navigateur. `check_license()`
+// échoue déjà systématiquement quand aucune licence valide n'est installée
+// (cas de la version gratuite), donc "une licence existe et vérifie" suffit
+// à distinguer gratuit de payant — pas besoin d'inspecter la valeur du tier.
+fn require_paid_license() -> Result<(), String> {
+    license::check_license().map(|_| ()).map_err(|_| "PRO_REQUIRED".to_string())
+}
+
 fn unlock(path: &str, password: &str) -> Result<Vec<VaultEntry>, String> {
     let vault_path = PathBuf::from(path);
     if !vault_path.exists() {
@@ -120,6 +130,9 @@ fn session_file_path() -> PathBuf {
 }
 
 fn try_live_session() -> Value {
+    if let Err(e) = require_paid_license() {
+        return err(e);
+    }
     let raw = match std::fs::read_to_string(session_file_path()) {
         Ok(s) => s,
         Err(_) => return err("NO_SESSION"),
@@ -179,10 +192,15 @@ fn handle(req: Request) -> Value {
             Err(e) => err(e),
         },
         Request::GetLastVaultPath => ok(json!({ "path": get_last_vault_path() })),
-        Request::Unlock { path, password } => match unlock(&path, &password) {
-            Ok(entries) => ok(json!({ "entries": entries })),
-            Err(e) => err(e),
-        },
+        Request::Unlock { path, password } => {
+            if let Err(e) = require_paid_license() {
+                return err(e);
+            }
+            match unlock(&path, &password) {
+                Ok(entries) => ok(json!({ "entries": entries })),
+                Err(e) => err(e),
+            }
+        }
         Request::TryLiveSession => try_live_session(),
     }
 }

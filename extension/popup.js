@@ -1,6 +1,7 @@
 const views = {
   loading: document.getElementById("view-loading"),
   notInstalled: document.getElementById("view-not-installed"),
+  proRequired: document.getElementById("view-pro-required"),
   locked: document.getElementById("view-locked"),
   unlocked: document.getElementById("view-unlocked"),
 };
@@ -40,6 +41,7 @@ function errorMessage(code) {
     NATIVE_HOST_UNAVAILABLE: "Impossible de contacter l'app Kyber. Est-elle installée ?",
     "Mot de passe incorrect.": "Mot de passe incorrect.",
     "Coffre invalide ou corrompu.": "Ce fichier n'est pas un coffre Kyber valide.",
+    PRO_REQUIRED: "L'extension nécessite une licence Pro, Famille ou Équipe.",
   };
   return known[code] || code || "Erreur inconnue.";
 }
@@ -405,6 +407,16 @@ async function boot() {
   if (!ping.ok) {
     if (existing.ok) await sendToBackground("LOCK");
     showView("notInstalled");
+    return;
+  }
+
+  // L'extension est réservée aux licences payantes (Pro / Famille / Équipe) :
+  // la version gratuite de l'app reste utilisable normalement, mais pas ici.
+  // Même vérification côté hôte natif (unlock / try_live_session) — ce garde
+  // côté popup évite juste d'afficher la saisie du mot de passe pour rien.
+  if (!ping.data.licensed) {
+    if (existing.ok) await sendToBackground("LOCK");
+    showView("proRequired");
     return;
   }
   setTierBadge(ping.data.tier);

@@ -2,8 +2,16 @@
 
 Mode "compagnon" : l'extension ne stocke aucune donnée elle-même. Elle parle
 en local à l'app Kyber déjà installée (native messaging), qui fait tout le
-travail de déchiffrement avec le vrai fichier `.vault`. Une seule licence
-active donc l'app ET l'extension.
+travail de déchiffrement avec le vrai fichier `.vault`.
+
+**Réservée aux licences payantes** (Pro / Famille / Équipe) : la version
+gratuite de l'app reste pleinement utilisable pour gérer ses coffres, mais
+n'ouvre pas l'accès au compagnon navigateur. Vérifié côté hôte natif
+(`native_host.rs::require_paid_license`, appelé avant `unlock` et
+`try_live_session` — `check_license()` échoue systématiquement en gratuit,
+faute de fichier `license.key`), pas seulement côté UI de l'extension : un
+utilisateur gratuit qui inspecterait/modifierait le popup ne contournerait
+rien, la vérification est refaite par le process natif à chaque requête.
 
 ## Connexion live à l'app (nouveau)
 
@@ -78,6 +86,9 @@ tourne" ; `get_entries` exige le jeton exact pour toute donnée réelle.
   récupère les entrées directement, sans redemander le mot de passe (voir
   section dédiée ci-dessus)
 - Détection de l'app installée + statut de licence (`ping`)
+- **Accès réservé aux licences payantes** : sans licence Pro/Famille/Équipe,
+  le popup affiche directement un écran "licence requise" (vue
+  `view-pro-required`) sans jamais proposer la saisie du mot de passe
 - Déverrouillage du vrai `.vault` (coffre v1 et v2) via l'hôte natif (repli
   automatique si pas de session live)
 - Liste des entrées + recherche, triée avec le site actuellement ouvert en
