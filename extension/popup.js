@@ -30,7 +30,7 @@ function setTierBadge(tier) {
 function setLiveBadge(isLive) {
   const badge = document.getElementById("conn-badge");
   badge.textContent = "Connecté à l'app";
-  badge.title = "Coffre déjà ouvert dans l'app Kyber — connexion automatique, sans mot de passe.";
+  badge.title = "Coffre déjà ouvert dans l'app Kyber / connexion automatique, sans mot de passe.";
   badge.classList.toggle("hidden", !isLive);
 }
 
@@ -64,7 +64,7 @@ function matchesCurrentSite(entry) {
 
 // Même palette et même hash que l'avatar-lettre de l'app desktop (ui/main.js
 // `letterIcon`) : aucun appel réseau, un simple hash déterministe du domaine.
-const AVATAR_PALETTE = ["#6366F1", "#8B5CF6", "#EC4899", "#EF4444", "#F97316", "#10B981", "#06B6D4", "#3B82F6"];
+const AVATAR_PALETTE = ["#6366F1", "#8B5CF6", "#EC4899", "#EF4444", "#F59E0B", "#10B981", "#A78BFA", "#3B82F6"];
 
 function avatarFor(entry) {
   const domain = domainOf(entry.url) || entry.title || "?";
@@ -317,8 +317,8 @@ function renderStrength(score) {
   const lbl = document.getElementById("strength-lbl");
   fill.style.width = score + "%";
   if (score < 30) { fill.style.background = "#EF4444"; lbl.textContent = "Très faible"; lbl.style.color = "#EF4444"; }
-  else if (score < 50) { fill.style.background = "#F97316"; lbl.textContent = "Faible"; lbl.style.color = "#F97316"; }
-  else if (score < 70) { fill.style.background = "#F59E0B"; lbl.textContent = "Moyen"; lbl.style.color = "#F59E0B"; }
+  else if (score < 50) { fill.style.background = "#F59E0B"; lbl.textContent = "Faible"; lbl.style.color = "#F59E0B"; }
+  else if (score < 70) { fill.style.background = "#FBBF24"; lbl.textContent = "Moyen"; lbl.style.color = "#FBBF24"; }
   else if (score < 90) { fill.style.background = "#10B981"; lbl.textContent = "Fort"; lbl.style.color = "#10B981"; }
   else { fill.style.background = "#6366F1"; lbl.textContent = "Très fort"; lbl.style.color = "#6366F1"; }
 }

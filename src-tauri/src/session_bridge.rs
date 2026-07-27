@@ -22,13 +22,35 @@
 use crate::vault::VaultEntry;
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Value};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const PORT: u16 = 47732;
+
+// Une requête légitime ({"cmd":"get_entries","token":"<64 hex>"}) tient sur
+// une centaine d'octets ; cette borne évite qu'un process local puisse forcer
+// une allocation mémoire non bornée en streamant une "ligne" sans jamais
+// envoyer de \n (déni de service, atteignable avant même la vérification du
+// jeton puisque `ping` n'en demande pas).
+const MAX_REQUEST_BYTES: u64 = 8 * 1024;
+
+/// Comparaison en temps constant (évite une fuite de timing sur le jeton,
+/// même si un attaquant avec exécution de code locale peut de toute façon
+/// lire `session.json` directement — défense en profondeur).
+fn tokens_match(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
 
 pub struct SessionBridgeInner {
     token: String,
@@ -78,7 +100,7 @@ fn handle_client(mut stream: TcpStream, bridge: &SessionBridge) {
     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
 
     let mut reader = match stream.try_clone() {
-        Ok(s) => BufReader::new(s),
+        Ok(s) => BufReader::new(s.take(MAX_REQUEST_BYTES)),
         Err(_) => return,
     };
     let mut line = String::new();
@@ -98,7 +120,11 @@ fn handle_client(mut stream: TcpStream, bridge: &SessionBridge) {
     let resp = match cmd {
         "ping" => json!({ "ok": true, "data": { "running": true } }),
         "get_entries" => {
-            let token_ok = req.get("token").and_then(|v| v.as_str()) == Some(bridge.token.as_str());
+            let token_ok = req
+                .get("token")
+                .and_then(|v| v.as_str())
+                .map(|t| tokens_match(t, &bridge.token))
+                .unwrap_or(false);
             if !token_ok {
                 json!({ "ok": false, "error": "UNAUTHORIZED" })
             } else {
@@ -132,17 +158,37 @@ pub fn start() -> SessionBridge {
         entries: Mutex::new(None),
     });
 
+    // Un `session.json` laissé par un lancement précédent (crash, arrêt
+    // brutal) ne doit jamais survivre au-delà de cette tentative de démarrage :
+    // s'il reste en place alors qu'un autre process a entre-temps pris le
+    // port, l'extension pourrait s'y connecter en pensant parler à l'app.
+    let _ = std::fs::remove_file(session_file());
+
     match TcpListener::bind(("127.0.0.1", PORT)) {
         Ok(listener) => {
             let payload = json!({ "port": PORT, "token": bridge.token });
-            if let Err(e) = std::fs::write(session_file(), payload.to_string()) {
+            let path = session_file();
+            if let Err(e) = std::fs::write(&path, payload.to_string()) {
                 log::warn!("[session_bridge] impossible d'écrire session.json : {}", e);
+            }
+            // session.json contient le jeton d'accès au coffre déverrouillé :
+            // sur Linux/macOS, le restreindre au compte courant (Windows
+            // hérite déjà des ACL du dossier utilisateur).
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
             }
 
             spawn_listener(listener, bridge.clone());
             log::info!("[session_bridge] pont extension démarré sur 127.0.0.1:{}", PORT);
         }
         Err(e) => {
+            // Le port est pris par un autre process (autre instance de Kyber,
+            // ou pire, un process tiers) : pas de session.json valide pour
+            // cette instance, l'extension retombe proprement sur la saisie
+            // manuelle du mot de passe plutôt que de risquer de parler à un
+            // process qui n'est pas l'app.
             log::warn!(
                 "[session_bridge] port {} indisponible ({}) — pont désactivé pour cette instance (une autre s'exécute probablement déjà)",
                 PORT,

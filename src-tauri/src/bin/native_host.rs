@@ -152,7 +152,10 @@ fn try_live_session() -> Value {
         return err("NO_SESSION");
     }
 
-    let mut reader = BufReader::new(stream);
+    // Même borne défensive que côté serveur (session_bridge.rs) : une
+    // réponse légitime tient sur quelques Ko, pas la peine de laisser un
+    // pair local (même de confiance) forcer une lecture non bornée.
+    let mut reader = BufReader::new(stream.take(64 * 1024));
     let mut line = String::new();
     if reader.read_line(&mut line).unwrap_or(0) == 0 {
         return err("NO_SESSION");

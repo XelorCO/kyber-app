@@ -182,6 +182,13 @@ pub fn decrypt_file(master_key: &MasterKey, source_path: &str, dest_dir: &str) -
         let out_dir = dest_base.join(&meta.name);
         fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
 
+        // Même limite que la compression (encrypt_folder) : borne dure sur la
+        // taille décompressée cumulée, indépendante de ce que l'en-tête zip
+        // prétend (une zip-bomb ment sur sa taille annoncée), pour ne pas
+        // pouvoir remplir le disque avec un .kyber trafiqué.
+        const MAX_DECOMPRESSED_SIZE: u64 = 500 * 1024 * 1024; // 500 MB
+        let mut total_extracted: u64 = 0;
+
         let cursor = std::io::Cursor::new(data);
         let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
 
@@ -201,7 +208,17 @@ pub fn decrypt_file(master_key: &MasterKey, source_path: &str, dest_dir: &str) -
                     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
                 let mut file = fs::File::create(&entry_path).map_err(|e| e.to_string())?;
-                std::io::copy(&mut entry, &mut file).map_err(|e| e.to_string())?;
+                let remaining = MAX_DECOMPRESSED_SIZE.saturating_sub(total_extracted);
+                if remaining == 0 {
+                    return Err("Archive trop volumineuse une fois décompressée (limite 500 MB).".to_string());
+                }
+                use std::io::Read;
+                let copied = std::io::copy(&mut entry.by_ref().take(remaining), &mut file)
+                    .map_err(|e| e.to_string())?;
+                total_extracted += copied;
+                if copied == remaining && entry.bytes().next().is_some() {
+                    return Err("Archive trop volumineuse une fois décompressée (limite 500 MB).".to_string());
+                }
             }
         }
 

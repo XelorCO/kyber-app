@@ -40,6 +40,7 @@ fn derive_final_key(seed_key: &[u8; 32], pq_ss: &[u8]) -> MasterKey {
     ikm.extend_from_slice(seed_key);
     ikm.extend_from_slice(pq_ss);
     let hk = Hkdf::<Sha256>::new(None, &ikm);
+    ikm.zeroize();
     let mut okm = [0u8; 32];
     hk.expand(b"KyberVault-v2-final-key", &mut okm).expect("HKDF expand");
     MasterKey(okm)
@@ -68,11 +69,12 @@ pub fn open_kyber_vault_key(
     pq_sk_nonce: &[u8; 12],
 ) -> Result<MasterKey, String> {
     let seed_mk = MasterKey(*seed_key);
-    let pq_sk_bytes = decrypt_vault_payload(&seed_mk, pq_sk_nonce, pq_sk_enc)
+    let mut pq_sk_bytes = decrypt_vault_payload(&seed_mk, pq_sk_nonce, pq_sk_enc)
         .map_err(|_| "Mot de passe incorrect ou coffre corrompu.".to_string())?;
 
     let pq_sk = SecretKey::from_bytes(&pq_sk_bytes)
         .map_err(|_| "Clé secrète Kyber corrompue.".to_string())?;
+    pq_sk_bytes.zeroize();
     let pq_ct = Ciphertext::from_bytes(pq_ct_bytes)
         .map_err(|_| "Ciphertext Kyber corrompu.".to_string())?;
 

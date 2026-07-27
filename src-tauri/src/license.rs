@@ -70,5 +70,10 @@ pub fn activate_license(license_key: String) -> Result<LicensePayload, String> {
     let payload = verify_license_string(&license_key)?;
     let path = get_license_path();
     fs::write(&path, license_key).map_err(|_| "Impossible de sauvegarder la licence")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
     Ok(payload)
 }
