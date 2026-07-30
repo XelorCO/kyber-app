@@ -44,6 +44,9 @@
         <div id="create-warning" class="warn-box hidden">
           ⚠︎ Ce mot de passe est <strong>irremplaçable</strong>. En cas de perte, vos données seront <strong>définitivement inaccessibles</strong>. Notez-le physiquement.
         </div>
+        <div id="create-rotation-row" class="hidden" style="margin:2px 0 14px">
+          <label class="cb-label"><input type="checkbox" id="create-rotation" checked /> Me rappeler de changer mes mots de passe tous les 30 jours</label>
+        </div>
         <button class="btn-primary full" id="login-btn">Déverrouiller</button>
         <p id="login-err" class="err-text"></p>
         <div class="login-badge">◆ Kyber1024 · AES-256-GCM · Argon2id</div>
@@ -104,6 +107,20 @@
             <button class="btn-primary" id="migrate-btn">Migrer vers v2</button>
             <button class="btn-ghost" id="migrate-dismiss">Plus tard</button>
           </div>
+        </div>
+        <!-- Bannière rappel de rotation des mots de passe (30 jours) -->
+        <div id="rotation-banner" class="migrate-banner hidden" style="flex-direction:column;align-items:stretch;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+            <div class="mb-left">
+              <span class="mb-icon">↻</span>
+              <div>
+                <strong id="rotation-banner-title">Mots de passe à renouveler</strong>
+                <p id="rotation-banner-desc">Ces mots de passe n'ont pas été changés depuis plus de 30 jours.</p>
+              </div>
+            </div>
+            <button class="btn-ghost" id="rotation-dismiss">Plus tard</button>
+          </div>
+          <div id="rotation-list" class="rotation-list"></div>
         </div>
         <div class="view-header">
           <h2>Votre Coffre</h2>
@@ -221,6 +238,11 @@
             <h3>Coffre actif</h3>
             <p id="sett-path" class="sett-val">—</p>
             <p id="sett-vault-version" class="sett-val" style="margin-top:6px;font-size:.8rem;color:var(--muted)">—</p>
+          </div>
+          <div class="settings-card">
+            <h3>Rotation des mots de passe</h3>
+            <p>Kyber te rappelle de renouveler un mot de passe 30 jours après sa dernière modification.</p>
+            <label class="cb-label" style="margin-top:12px;display:flex"><input type="checkbox" id="sett-rotation" /> Activer le rappel de rotation (30 jours)</label>
           </div>
           <div class="settings-card">
             <h3>Importer des mots de passe</h3>

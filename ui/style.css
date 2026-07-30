@@ -261,6 +261,14 @@ body{background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;}
 .hi-tag.dupe{background:rgba(129,140,248,.1);color:var(--indigo);border:1px solid rgba(129,140,248,.25);}
 .hi-tag.old{background:rgba(168,162,158,.08);color:var(--muted);border:1px solid var(--border);}
 
+.rotation-list{display:flex;flex-direction:column;gap:7px;}
+.rotation-item{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 14px;
+}
+.rotation-item strong{font-size:.86rem;color:var(--text);}
+.rotation-item span{font-size:.76rem;color:var(--muted);}
+
 /* ══════════════════════════════════════════════════════════
    PARAMÈTRES
    ══════════════════════════════════════════════════════════ */

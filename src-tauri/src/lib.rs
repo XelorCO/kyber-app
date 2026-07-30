@@ -435,6 +435,69 @@ fn get_vault_health(state: State<'_, AppState>) -> Result<HealthReport, String> 
     Ok(HealthReport { weak, duplicates, old })
 }
 
+// ── Rappel de rotation des mots de passe (réglage par coffre, annulable à tout moment) ──
+fn rotation_settings_path() -> PathBuf {
+    let mut p = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    p.push(".kyber");
+    let _ = fs::create_dir_all(&p);
+    p.push("rotation_settings.json");
+    p
+}
+
+fn read_rotation_settings() -> std::collections::HashMap<String, bool> {
+    let path = rotation_settings_path();
+    if !path.exists() { return Default::default(); }
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn write_rotation_settings(map: &std::collections::HashMap<String, bool>) {
+    if let Ok(s) = serde_json::to_string(map) {
+        let _ = fs::write(rotation_settings_path(), s);
+    }
+}
+
+#[tauri::command]
+fn get_rotation_setting(path: &str) -> bool {
+    read_rotation_settings().get(path).copied().unwrap_or(false)
+}
+
+#[tauri::command]
+fn set_rotation_setting(path: &str, enabled: bool) {
+    let mut map = read_rotation_settings();
+    map.insert(path.to_string(), enabled);
+    write_rotation_settings(&map);
+}
+
+/// Entrées dont le mot de passe n'a pas été changé depuis 30 jours, uniquement
+/// si le rappel est activé pour CE coffre — stocké hors du fichier .vault
+/// (registre séparé) pour ne rien changer au format binaire des coffres existants.
+#[tauri::command]
+fn get_rotation_due(state: State<'_, AppState>) -> Result<Vec<VaultEntry>, String> {
+    let vault_lock = state.vault_data.lock().unwrap();
+    let path_lock = state.vault_path.lock().unwrap();
+    let vault = vault_lock.as_ref().ok_or("Coffre non déverrouillé.")?;
+    let path = path_lock.as_ref().ok_or("Coffre non déverrouillé.")?;
+
+    let enabled = read_rotation_settings()
+        .get(&path.to_string_lossy().to_string())
+        .copied()
+        .unwrap_or(false);
+    if !enabled {
+        return Ok(vec![]);
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    const THIRTY_DAYS: u64 = 30 * 24 * 3600;
+    Ok(vault.entries.values()
+        .filter(|e| now.saturating_sub(e.last_modified) > THIRTY_DAYS)
+        .cloned()
+        .collect())
+}
+
 // ── Import CSV (Bitwarden / 1Password / générique) ─────────────
 #[tauri::command]
 fn import_csv(
@@ -682,6 +745,9 @@ pub fn run() {
             autofill_password,
             copy_secure,
             get_vault_health,
+            get_rotation_setting,
+            set_rotation_setting,
+            get_rotation_due,
             import_csv,
             license::check_license,
             license::activate_license,

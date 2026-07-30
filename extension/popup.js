@@ -230,8 +230,11 @@ function injectedFill(username, password) {
   return { ok: true };
 }
 
-// Variante générateur : ne touche qu'au champ mot de passe (on ne veut pas
+// Variante générateur : ne touche qu'aux champs mot de passe (on ne veut pas
 // écraser un identifiant déjà saisi juste parce qu'on a généré un nouveau mdp).
+// Gère aussi les formulaires "changer mon mot de passe" (souvent 2-3 champs :
+// actuel / nouveau / confirmation) : on remplit "nouveau" + "confirmation"
+// mais on laisse "actuel" tel quel pour que l'utilisateur le saisisse lui-même.
 function injectedFillPasswordOnly(password) {
   function isVisible(el) {
     if (!el.offsetParent && getComputedStyle(el).position !== "fixed") return false;
@@ -248,10 +251,23 @@ function injectedFillPasswordOnly(password) {
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  const passwordField = Array.from(document.querySelectorAll('input[type="password"]:not([disabled])')).find(isVisible);
-  if (!passwordField) return { ok: false, error: "Aucun champ mot de passe visible trouvé sur cette page." };
-  setNativeValue(passwordField, password);
-  return { ok: true };
+  function looksLikeCurrentPassword(el) {
+    if (el.autocomplete === "current-password") return true;
+    const blob = [el.name, el.id, el.placeholder, el.getAttribute("aria-label")]
+      .filter(Boolean).join(" ").toLowerCase();
+    return /current|old|existing|actuel|ancien/.test(blob);
+  }
+
+  const fields = Array.from(document.querySelectorAll('input[type="password"]:not([disabled])')).filter(isVisible);
+  if (fields.length === 0) return { ok: false, error: "Aucun champ mot de passe visible trouvé sur cette page." };
+
+  // 1 seul champ = connexion classique. Plusieurs champs = probable
+  // changement de mot de passe : on évite d'écraser le champ "actuel".
+  let targets = fields.length === 1 ? fields : fields.filter((f) => !looksLikeCurrentPassword(f));
+  if (targets.length === 0) targets = fields; // tous détectés "actuel" par erreur : on remplit quand même
+
+  targets.forEach((f) => setNativeValue(f, password));
+  return { ok: true, filled: targets.length, multi: fields.length > 1 };
 }
 
 async function fillEntry(entry) {
@@ -369,7 +385,9 @@ document.getElementById("gen-fill-btn").addEventListener("click", async () => {
       args: [pwd],
     });
     if (result?.ok) {
-      showToast("✦ Mot de passe inséré sur la page");
+      showToast(result.multi
+        ? `✦ Nouveau mot de passe inséré (${result.filled} champ${result.filled > 1 ? "s" : ""} / formulaire de changement détecté)`
+        : "✦ Mot de passe inséré sur la page");
     } else {
       statusEl.textContent = result?.error || "Impossible de remplir cette page.";
     }

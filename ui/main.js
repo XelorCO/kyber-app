@@ -321,6 +321,7 @@ function setLoginMode(mode) {
   $('ltab-open').classList.toggle('active', mode === 'open');
   $('ltab-create').classList.toggle('active', mode === 'create');
   $('create-warning').classList.toggle('hidden', mode === 'open');
+  $('create-rotation-row').classList.toggle('hidden', mode === 'open');
   $('login-btn').textContent = mode === 'open' ? 'Déverrouiller' : 'Créer le coffre';
   $('login-err').textContent = '';
 }
@@ -339,6 +340,9 @@ on('login-btn', 'click', async () => {
   try {
     const cmd = loginMode === 'open' ? 'unlock_vault' : 'init_vault';
     entries = await invoke(cmd, { password, path });
+    if (loginMode === 'create') {
+      await invoke('set_rotation_setting', { path, enabled: $('create-rotation').checked });
+    }
     vaultPath = path;
     isUnlocked = true;
     $('master-pass').value = '';
@@ -349,6 +353,8 @@ on('login-btn', 'click', async () => {
     updateHealthBadge();
     checkLicenseStatus();
     checkVaultVersion(); // Propose migration si coffre v1
+    checkRotationReminders();
+    invoke('get_rotation_setting', { path }).then(v => { $('sett-rotation').checked = v; }).catch(() => {});
   } catch(e) {
     if (e === 'NOT_FOUND') setLoginMode('create');
     else if (e === 'VAULT_EXISTS') {
@@ -846,6 +852,56 @@ on('migrate-btn', 'click', () => {
 });
 
 on('migrate-dismiss', 'click', () => $('migrate-banner').classList.add('hidden'));
+
+// ══════════════════════════════════════════════════
+//  ROTATION DES MOTS DE PASSE (rappel 30 jours, annulable à tout moment)
+// ══════════════════════════════════════════════════
+async function checkRotationReminders() {
+  try {
+    const due = await invoke('get_rotation_due');
+    if (!due || due.length === 0) { $('rotation-banner').classList.add('hidden'); return; }
+    const n = due.length;
+    $('rotation-banner-desc').textContent =
+      `${n} mot${n > 1 ? 's' : ''} de passe n'${n > 1 ? 'ont' : 'a'} pas été changé${n > 1 ? 's' : ''} depuis plus de 30 jours.`;
+    $('rotation-list').innerHTML = due.map(e => `
+      <div class="rotation-item">
+        <div><strong>${escapeHtml(e.title)}</strong><br><span>${escapeHtml(e.username) || '—'}</span></div>
+        <button class="ec-btn" data-action="rotate" data-id="${escapeHtml(e.id)}">↻ Régénérer</button>
+      </div>`).join('');
+    $('rotation-banner').classList.remove('hidden');
+  } catch { /* silent — coffre pas déverrouillé ou rappel désactivé */ }
+}
+
+async function regenerateEntry(id) {
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+  try {
+    const newPassword = await invoke('generate_password_options', {
+      length: 32, upper: true, lower: true, digits: true, symbols: true,
+    });
+    entries = await invoke('update_entry', {
+      id, title: entry.title, username: entry.username, password: newPassword, url: entry.url,
+    });
+    renderVault($('search-input').value.toLowerCase().trim());
+    updateHealthBadge();
+    checkRotationReminders();
+    showToast(`↻ Nouveau mot de passe généré pour "${entry.title}"`);
+  } catch (e) { alert(e); }
+}
+
+on('rotation-dismiss', 'click', () => $('rotation-banner').classList.add('hidden'));
+
+$('rotation-list').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('[data-action="rotate"]');
+  if (!btn) return;
+  await regenerateEntry(btn.dataset.id);
+});
+
+on('sett-rotation', 'change', async () => {
+  if (!vaultPath) return;
+  await invoke('set_rotation_setting', { path: vaultPath, enabled: $('sett-rotation').checked });
+  checkRotationReminders();
+});
 on('migrate-cancel', 'click', () => $('migrate-modal').classList.add('hidden'));
 $('migrate-pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('migrate-confirm').click(); });
 
