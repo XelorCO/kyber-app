@@ -1,82 +1,42 @@
-# Kyber — Contexte projet
+# Kyber — contexte pour agents IA
 
-## C'est quoi
-Gestionnaire de mots de passe post-quantique français.
-- App de bureau : Rust + Tauri 2 + Vite (JS vanilla)
-- Site web : Next.js dans `../Kyber-site/` (GitHub: XelorCO/kyber-site, live sur kyber-security.fr)
+Gestionnaire de mots de passe post-quantique, 100 % local, **gratuit et open
+source (Apache-2.0)**. Pas de licence, pas de freemium, pas de compte.
 
-## Structure du dossier
-```
-Kyber/
-├── src-tauri/        ← code Rust + config Tauri
-│   ├── src/
-│   │   ├── main.rs
-│   │   ├── license.rs   ← vérification licence Ed25519
-│   │   └── ...
-│   ├── tauri.conf.json
-│   └── Cargo.toml
-└── ui/               ← frontend Vite (JS vanilla)
-    ├── index.html
-    ├── main.js
-    └── package.json
-```
+- App de bureau : Rust + Tauri 2 (`src-tauri/`) + Vite / JS vanilla (`ui/`)
+- Extension navigateur compagnon : `extension/` (MV3)
+- Site vitrine : dépôt séparé `kyber-site` (Next.js, `kyber-security.fr`)
 
-## Comment compiler
+## Documentation de référence
 
-### 1. Builder le frontend
+- [`README.md`](README.md) — présentation, modèle de sécurité honnête, build
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — rôle de chaque module, formats de fichier
+- [`SECURITY.md`](SECURITY.md) — modèle de menace, signalement de faille
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — commandes fmt/clippy/test, processus de release
+- [`CHANGELOG.md`](CHANGELOG.md)
+
+## Vérifs avant de proposer un changement
+
 ```bash
-cd ui && npm install && npm run build
+cd src-tauri
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings   # objectif : zéro warning
+cargo test
+cd ../ui && npm run build
 ```
 
-### 2. Builder l'app Tauri
-```bash
-cd src-tauri && cargo tauri build
-```
-> Si `cargo tauri` n'existe pas : `cargo install tauri-cli --version "^2"`
+## Points à ne pas oublier
 
-### Dépendances Linux nécessaires (Debian/Ubuntu/Kali)
-```bash
-sudo apt update && sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  patchelf \
-  libssl-dev \
-  pkg-config
-```
-
-### Output Linux attendu
-```
-src-tauri/target/release/bundle/deb/kyber_1.0.0_amd64.deb
-src-tauri/target/release/bundle/appimage/Kyber_1.0.0_amd64.AppImage
-```
-
-## Après la compilation
-Copier les binaires dans le site :
-```bash
-cp src-tauri/target/release/bundle/appimage/Kyber_1.0.0_amd64.AppImage \
-   ../Kyber-site/public/downloads/
-
-cp src-tauri/target/release/bundle/deb/kyber_1.0.0_amd64.deb \
-   ../Kyber-site/public/downloads/
-```
-
-Puis mettre à jour le lien Linux dans `../Kyber-site/app/page.tsx` :
-- Trouver la carte Linux (`platform: 'Linux'`)
-- Changer `href: null` → `href: '/downloads/Kyber_1.0.0_amd64.AppImage'`
-- Changer `label: 'Bientôt disponible'` → `label: 'Télécharger .AppImage'`
-- Changer `available: false` → `available: true`
-
-Puis commit + push depuis `../Kyber-site/` :
-```bash
-cd ../Kyber-site
-git add public/downloads/ app/page.tsx
-git commit -m "feat: add Linux AppImage binary"
-git push
-```
-
-## Infos importantes
-- Licence : Ed25519, clé publique dans `src-tauri/src/license.rs` (`PUBLIC_KEY_BYTES`)
-- Version actuelle : 1.2.0
-- Windows déjà compilé : `Kyber_1.0.0_x64-setup.exe` disponible sur le site
+- Toute la crypto est dans `src-tauri/src/crypto.rs` — ne pas la dupliquer.
+  La sécurité au repos = passphrase + Argon2id + AES-256-GCM ; ML-KEM-1024 est
+  de la défense en profondeur (sa clé est scellée sous la seed Argon2id).
+  **Ne pas prétendre « incassable grâce au post-quantique ».**
+- Commentaires et messages d'erreur en français.
+- `~/.kyber/license.key` n'existe plus dans le code : le système de licence a
+  été retiré en 2.0.0.
+- Windows : lancer `cargo tauri dev` via un terminal détaché (`Start-Process`),
+  sinon le process se fait tuer prématurément.
+- Clé de signature updater : **hors du dépôt**, variable
+  `TAURI_SIGNING_PRIVATE_KEY` (pas `_PATH`).
+- Le dossier `src/` à la racine est un vestige legacy — le vrai code est
+  `src-tauri/src/`.

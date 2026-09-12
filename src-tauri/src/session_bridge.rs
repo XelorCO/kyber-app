@@ -1,18 +1,18 @@
-// ── Pont de session pour l'extension navigateur ─────────────────────────────
-//
-// Quand l'app tourne et qu'un coffre est déverrouillé, l'extension peut
-// récupérer les entrées directement, SANS redemander le mot de passe maître,
-// via une petite socket loopback protégée par un jeton aléatoire. Ça évite à
-// l'utilisateur de retaper son mot de passe dans le navigateur alors que le
-// coffre est déjà ouvert dans l'app de bureau.
-//
-// Modèle de confiance : identique aux autres fichiers sous `~/.kyber`
-// (`last_vault.txt`, `vaults.json`, `license.key`) — lisible uniquement par
-// le compte Windows courant. La socket n'écoute JAMAIS que sur 127.0.0.1
-// (jamais exposée au réseau) et exige le jeton lu dans `session.json` pour
-// toute donnée sensible (`get_entries`) ; `ping` seul (sans jeton) ne révèle
-// que "l'app tourne", une info de toute façon observable autrement (process,
-// registre du native host).
+//! Pont de session local pour l'extension navigateur.
+//!
+//! Quand l'app tourne et qu'un coffre est déverrouillé, l'extension peut
+//! récupérer les entrées directement, SANS redemander le mot de passe maître,
+//! via une petite socket loopback protégée par un jeton aléatoire. Ça évite à
+//! l'utilisateur de retaper son mot de passe dans le navigateur alors que le
+//! coffre est déjà ouvert dans l'app de bureau.
+//!
+//! Modèle de confiance : identique aux autres fichiers sous `~/.kyber`
+//! (`last_vault.txt`, `vaults.json`) — lisible uniquement par le compte
+//! utilisateur courant. La socket n'écoute JAMAIS que sur 127.0.0.1
+//! (jamais exposée au réseau) et exige le jeton lu dans `session.json` pour
+//! toute donnée sensible (`get_entries`) ; `ping` seul (sans jeton) ne révèle
+//! que "l'app tourne", une info de toute façon observable autrement (process,
+//! registre du native host).
 //
 // Ce module ne fait AUCUNE hypothèse sur l'ordre de démarrage : si le port
 // est déjà pris (ex : une deuxième instance de Kyber), on abandonne
@@ -141,11 +141,9 @@ fn handle_client(mut stream: TcpStream, bridge: &SessionBridge) {
 
 fn spawn_listener(listener: TcpListener, bridge: SessionBridge) {
     std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            if let Ok(stream) = stream {
-                let b = bridge.clone();
-                std::thread::spawn(move || handle_client(stream, &b));
-            }
+        for stream in listener.incoming().flatten() {
+            let b = bridge.clone();
+            std::thread::spawn(move || handle_client(stream, &b));
         }
     });
 }
@@ -181,7 +179,10 @@ pub fn start() -> SessionBridge {
             }
 
             spawn_listener(listener, bridge.clone());
-            log::info!("[session_bridge] pont extension démarré sur 127.0.0.1:{}", PORT);
+            log::info!(
+                "[session_bridge] pont extension démarré sur 127.0.0.1:{}",
+                PORT
+            );
         }
         Err(e) => {
             // Le port est pris par un autre process (autre instance de Kyber,
@@ -219,7 +220,9 @@ mod tests {
 
     fn roundtrip(addr: std::net::SocketAddr, req: Value) -> Value {
         let mut stream = TcpStream::connect(addr).expect("connexion au pont");
-        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         let mut body = serde_json::to_vec(&req).unwrap();
         body.push(b'\n');
         stream.write_all(&body).unwrap();
@@ -281,10 +284,15 @@ mod tests {
     #[test]
     fn commande_inconnue_et_json_invalide() {
         let (_bridge, addr) = test_bridge();
-        assert_eq!(roundtrip(addr, json!({ "cmd": "nope" }))["error"], "UNKNOWN_COMMAND");
+        assert_eq!(
+            roundtrip(addr, json!({ "cmd": "nope" }))["error"],
+            "UNKNOWN_COMMAND"
+        );
 
         let mut stream = TcpStream::connect(addr).unwrap();
-        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         stream.write_all(b"pas du json\n").unwrap();
         let mut line = String::new();
         BufReader::new(stream).read_line(&mut line).unwrap();

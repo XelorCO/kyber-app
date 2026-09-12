@@ -1,12 +1,14 @@
-// Hôte de native messaging pour l'extension navigateur Kyber (beta).
-// Protocole standard Chrome/Firefox : chaque message est préfixé par sa
-// longueur en u32 little-endian, corps en JSON UTF-8, sur stdin/stdout.
-//
-// L'extension ne fait AUCUN crypto elle-même dans ce mode : ce process
-// réutilise directement le moteur de `app_lib` (le même code que l'app
-// desktop) pour déverrouiller le vrai fichier .vault de l'utilisateur.
+//! Hôte de native messaging pour l'extension navigateur Kyber.
+//!
+//! Protocole standard Chrome/Firefox : chaque message est préfixé par sa
+//! longueur en u32 little-endian, corps en JSON UTF-8, sur stdin/stdout.
+//!
+//! Pour la gestion du coffre, l'extension ne fait aucun crypto elle-même :
+//! ce process réutilise directement le moteur de `app_lib` (le même code que
+//! l'app de bureau) pour déverrouiller le vrai fichier `.vault`. Sans état :
+//! un message → une réponse → sortie.
 
-use app_lib::{crypto, license, vault};
+use app_lib::{crypto, vault};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -19,9 +21,11 @@ use vault::{EncryptedVault, EncryptedVaultV2, VaultEntry, V2_MAGIC};
 #[serde(tag = "cmd", rename_all = "snake_case")]
 enum Request {
     Ping,
-    CheckLicense,
     GetLastVaultPath,
-    Unlock { path: String, password: String },
+    Unlock {
+        path: String,
+        password: String,
+    },
     /// Tente de récupérer les entrées d'un coffre déjà déverrouillé dans une
     /// instance de l'app en cours d'exécution (pont local `session_bridge`),
     /// pour éviter à l'extension de redemander le mot de passe maître.
@@ -42,7 +46,10 @@ fn read_message() -> io::Result<Option<Value>> {
     }
     let len = u32::from_le_bytes(len_buf) as usize;
     if len > MAX_MESSAGE_BYTES {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "message natif trop volumineux"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "message natif trop volumineux",
+        ));
     }
     let mut buf = vec![0u8; len];
     io::stdin().read_exact(&mut buf)?;
@@ -71,17 +78,10 @@ fn get_last_vault_path() -> String {
     let mut p = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     p.push(".kyber");
     p.push("last_vault.txt");
-    std::fs::read_to_string(p).unwrap_or_default().trim().to_string()
-}
-
-// L'extension navigateur est réservée aux licences payantes (Pro / Famille /
-// Équipe) : la version gratuite reste pleinement utilisable dans l'app de
-// bureau, mais ne donne pas accès au compagnon navigateur. `check_license()`
-// échoue déjà systématiquement quand aucune licence valide n'est installée
-// (cas de la version gratuite), donc "une licence existe et vérifie" suffit
-// à distinguer gratuit de payant — pas besoin d'inspecter la valeur du tier.
-fn require_paid_license() -> Result<(), String> {
-    license::check_license().map(|_| ()).map_err(|_| "PRO_REQUIRED".to_string())
+    std::fs::read_to_string(p)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
 }
 
 fn unlock(path: &str, password: &str) -> Result<Vec<VaultEntry>, String> {
@@ -95,13 +95,14 @@ fn unlock(path: &str, password: &str) -> Result<Vec<VaultEntry>, String> {
         let v2: EncryptedVaultV2 = bincode::deserialize(&raw[3..])
             .map_err(|_| "Coffre invalide ou corrompu.".to_string())?;
         let seed_key = crypto::derive_seed_key(password, &v2.salt);
-        let final_key = crypto::open_kyber_vault_key(&seed_key, &v2.pq_ct, &v2.pq_sk_enc, &v2.pq_sk_nonce)
-            .map_err(|_| "Mot de passe incorrect.".to_string())?;
+        let final_key =
+            crypto::open_kyber_vault_key(&seed_key, &v2.pq_ct, &v2.pq_sk_enc, &v2.pq_sk_nonce)
+                .map_err(|_| "Mot de passe incorrect.".to_string())?;
         crypto::decrypt_vault_payload(&final_key, &v2.nonce, &v2.ciphertext)
             .map_err(|_| "Mot de passe incorrect.".to_string())?
     } else {
-        let v1: EncryptedVault = bincode::deserialize(&raw)
-            .map_err(|_| "Coffre invalide ou corrompu.".to_string())?;
+        let v1: EncryptedVault =
+            bincode::deserialize(&raw).map_err(|_| "Coffre invalide ou corrompu.".to_string())?;
         let mk = crypto::derive_master_key(password, &v1.salt);
         crypto::decrypt_vault_payload(&mk, &v1.nonce, &v1.ciphertext)
             .map_err(|_| "Mot de passe incorrect.".to_string())?
@@ -130,9 +131,6 @@ fn session_file_path() -> PathBuf {
 }
 
 fn try_live_session() -> Value {
-    if let Err(e) = require_paid_license() {
-        return err(e);
-    }
     let raw = match std::fs::read_to_string(session_file_path()) {
         Ok(s) => s,
         Err(_) => return err("NO_SESSION"),
@@ -178,29 +176,15 @@ fn try_live_session() -> Value {
 
 fn handle(req: Request) -> Value {
     match req {
-        Request::Ping => {
-            let license = license::check_license();
-            ok(json!({
-                "installed": true,
-                "version": env!("CARGO_PKG_VERSION"),
-                "licensed": license.is_ok(),
-                "tier": license.ok().map(|p| p.tier),
-            }))
-        }
-        Request::CheckLicense => match license::check_license() {
-            Ok(payload) => ok(json!({ "name": payload.name, "email": payload.email, "tier": payload.tier })),
+        Request::Ping => ok(json!({
+            "installed": true,
+            "version": env!("CARGO_PKG_VERSION"),
+        })),
+        Request::GetLastVaultPath => ok(json!({ "path": get_last_vault_path() })),
+        Request::Unlock { path, password } => match unlock(&path, &password) {
+            Ok(entries) => ok(json!({ "entries": entries })),
             Err(e) => err(e),
         },
-        Request::GetLastVaultPath => ok(json!({ "path": get_last_vault_path() })),
-        Request::Unlock { path, password } => {
-            if let Err(e) = require_paid_license() {
-                return err(e);
-            }
-            match unlock(&path, &password) {
-                Ok(entries) => ok(json!({ "entries": entries })),
-                Err(e) => err(e),
-            }
-        }
         Request::TryLiveSession => try_live_session(),
     }
 }
@@ -212,14 +196,11 @@ fn main() {
     // donc jamais qu'un seul message avant de sortir. Aucun état de session
     // n'est conservé ici — l'extension recompose son propre état côté
     // navigateur (chrome.storage.session) après chaque `unlock`.
-    match read_message() {
-        Ok(Some(value)) => {
-            let response = match serde_json::from_value::<Request>(value) {
-                Ok(req) => handle(req),
-                Err(e) => err(format!("Requête invalide : {}", e)),
-            };
-            let _ = write_message(&response);
-        }
-        Ok(None) | Err(_) => {}
+    if let Ok(Some(value)) = read_message() {
+        let response = match serde_json::from_value::<Request>(value) {
+            Ok(req) => handle(req),
+            Err(e) => err(format!("Requête invalide : {}", e)),
+        };
+        let _ = write_message(&response);
     }
 }

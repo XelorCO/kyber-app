@@ -20,78 +20,6 @@ const $  = id => document.getElementById(id);
 const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
 
 // ══════════════════════════════════════════════════
-//  LICENCE SYSTEM (freemium)
-// ══════════════════════════════════════════════════
-let isLicensed = false;
-
-async function checkLicenseStatus() {
-  try {
-    const payload = await invoke('check_license');
-    isLicensed = true;
-    updateLicenseUI(payload);
-  } catch (_) {
-    isLicensed = false;
-    updateLicenseUI(null);
-  }
-}
-
-function updateLicenseUI(payload) {
-  if (payload) {
-    $('sett-license-free')?.classList.add('hidden');
-    $('sett-license-pro')?.classList.remove('hidden');
-    if ($('sett-license-name')) {
-      $('sett-license-name').textContent = `${payload.name} <${payload.email}> — ${payload.tier}`;
-    }
-  } else {
-    $('sett-license-free')?.classList.remove('hidden');
-    $('sett-license-pro')?.classList.add('hidden');
-  }
-}
-
-async function activateLicenseKey(key, errElId) {
-  if (!key) return false;
-  $(errElId).textContent = '';
-  try {
-    const payload = await invoke('activate_license', { licenseKey: key });
-    isLicensed = true;
-    updateLicenseUI(payload);
-    showToast(`✓ Licence activée ! Bienvenue ${payload.name}`);
-    return true;
-  } catch(e) {
-    $(errElId).textContent = typeof e === 'string' ? e : 'Clé invalide ou format incorrect.';
-    return false;
-  }
-}
-
-// ── Modale Upgrade ─────────────────────────────────────────────────────
-// `reason` adapte le message : 'entries' (limite de mots de passe, défaut)
-// ou 'vaults' (limite de coffres) — les deux limites déclenchent la même
-// modale mais ne doivent pas afficher le même texte.
-function showUpgradeModal(reason = 'entries') {
-  $('upgrade-desc').innerHTML = reason === 'vaults'
-    ? 'La version gratuite est limitée à <strong>1 coffre</strong>.<br>Passez à Kyber Premium pour créer autant de coffres que vous voulez.'
-    : 'La version gratuite est limitée à <strong>10 mots de passe</strong>.<br>Passez à Kyber Premium pour en stocker un nombre illimité.';
-  $('upgrade-license-key').value = '';
-  $('upgrade-err').textContent = '';
-  $('upgrade-modal').classList.remove('hidden');
-}
-
-on('upgrade-cancel', 'click', () => $('upgrade-modal').classList.add('hidden'));
-on('upgrade-go-btn', 'click', () => invoke('open_upgrade_url'));
-on('upgrade-activate-btn', 'click', async () => {
-  const key = $('upgrade-license-key').value.trim();
-  const ok = await activateLicenseKey(key, 'upgrade-err');
-  if (ok) $('upgrade-modal').classList.add('hidden');
-});
-
-// ── Paramètres — Licence ──────────────────────────────────────────────────
-on('sett-upgrade-btn', 'click', () => invoke('open_upgrade_url'));
-on('sett-activate-btn', 'click', async () => {
-  const key = $('sett-license-key').value.trim();
-  await activateLicenseKey(key, 'sett-license-err');
-});
-
-// ══════════════════════════════════════════════════
 //  MISES À JOUR (tauri-plugin-updater, signées)
 // ══════════════════════════════════════════════════
 let pendingUpdate = null;
@@ -351,7 +279,6 @@ on('login-btn', 'click', async () => {
     $('screen-app').classList.add('active');
     renderVault();
     updateHealthBadge();
-    checkLicenseStatus();
     checkVaultVersion(); // Propose migration si coffre v1
     checkRotationReminders();
     invoke('get_rotation_setting', { path }).then(v => { $('sett-rotation').checked = v; }).catch(() => {});
@@ -360,10 +287,6 @@ on('login-btn', 'click', async () => {
     else if (e === 'VAULT_EXISTS') {
       setLoginMode('open');
       $('login-err').textContent = 'Un coffre existe déjà à cet emplacement. Utilisez "Ouvrir le coffre".';
-    }
-    else if (e === 'VAULT_LIMIT_REACHED') {
-      $('login-err').textContent = '';
-      showUpgradeModal('vaults');
     }
     else $('login-err').textContent = e;
   }
@@ -521,12 +444,7 @@ on('m-save', 'click', async () => {
     renderVault($('search-input').value.toLowerCase().trim());
     updateHealthBadge();
   } catch(e) {
-    if (e === 'LIMIT_REACHED') {
-      closeEntryModal();
-      showUpgradeModal();
-    } else {
-      $('m-err').textContent = e;
-    }
+    $('m-err').textContent = e;
   }
 });
 
@@ -619,12 +537,8 @@ on('export-csv-btn', 'click', async () => {
     $('export-status').textContent = '✓ Export téléchargé.';
     $('export-status').style.color = 'var(--green)';
   } catch(e) {
-    if (e === 'PRO_REQUIRED') {
-      showUpgradeModal();
-    } else {
-      $('export-status').textContent = '✗ ' + e;
-      $('export-status').style.color = 'var(--red)';
-    }
+    $('export-status').textContent = '✗ ' + e;
+    $('export-status').style.color = 'var(--red)';
   }
 });
 
@@ -649,14 +563,8 @@ $('file-input').addEventListener('change', async () => {
     $('import-status').style.color = 'var(--green)';
     showToast(`✓ ${entries.length} entrées importées`);
   } catch(e) {
-    if (e === 'LIMIT_REACHED') {
-      $('import-status').textContent = '✗ Limite de 10 mots de passe atteinte. Passez à Pro pour importer davantage.';
-      $('import-status').style.color = 'var(--red)';
-      showUpgradeModal();
-    } else {
-      $('import-status').textContent = '✗ ' + e;
-      $('import-status').style.color = 'var(--red)';
-    }
+    $('import-status').textContent = '✗ ' + e;
+    $('import-status').style.color = 'var(--red)';
   }
   $('file-input').value = '';
 });
@@ -670,7 +578,6 @@ listen('scanner-detected', event => {
   if (!isUnlocked) return;
   // Ne pas afficher si une modale Kyber est déjà ouverte
   if (!$('entry-modal').classList.contains('hidden')) return;
-  if (!$('upgrade-modal').classList.contains('hidden')) return;
 
   const context = event.payload.context;
   // Ignorer les champs de Kyber lui-même (double sécurité côté JS)
@@ -929,7 +836,6 @@ on('migrate-confirm', 'click', async () => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('entry-modal').classList.contains('hidden')) { closeEntryModal(); return; }
-  if (!$('upgrade-modal').classList.contains('hidden')) { $('upgrade-modal').classList.add('hidden'); return; }
   if (!$('migrate-modal').classList.contains('hidden')) { $('migrate-modal').classList.add('hidden'); return; }
   if (!$('update-modal').classList.contains('hidden')) { closeUpdateModal(); return; }
   if (!$('scan-popup').classList.contains('hidden')) { $('scan-popup').classList.add('hidden'); }
@@ -937,7 +843,6 @@ document.addEventListener('keydown', e => {
 
 // Clic sur le fond des modales pour fermer
 $('entry-modal').addEventListener('click', e => { if (e.target === $('entry-modal')) closeEntryModal(); });
-$('upgrade-modal').addEventListener('click', e => { if (e.target === $('upgrade-modal')) $('upgrade-modal').classList.add('hidden'); });
 $('migrate-modal').addEventListener('click', e => { if (e.target === $('migrate-modal')) $('migrate-modal').classList.add('hidden'); });
 $('update-modal').addEventListener('click', e => { if (e.target === $('update-modal')) closeUpdateModal(); });
 

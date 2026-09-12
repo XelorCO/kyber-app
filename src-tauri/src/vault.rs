@@ -1,3 +1,14 @@
+//! Modèle du coffre et formats de fichier `.vault`.
+//!
+//! - **v1** ([`EncryptedVault`], lecture seule) : bincode `{ salt, nonce,
+//!   ciphertext }`, commence directement par le sel.
+//! - **v2** ([`EncryptedVaultV2`]) : 3 octets magic [`V2_MAGIC`] (`KY\x02`) puis
+//!   bincode incluant le ciphertext KEM ML-KEM-1024 et la clé secrète ML-KEM
+//!   scellée sous la seed Argon2id.
+//!
+//! Les données en clair ([`VaultData`]) sont sérialisées en bincode avant
+//! chiffrement.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -40,6 +51,12 @@ pub struct EncryptedVaultV2 {
     pub pq_sk_nonce: [u8; 12],
     pub nonce: [u8; 12],
     pub ciphertext: Vec<u8>,
+}
+
+impl Default for VaultData {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VaultData {

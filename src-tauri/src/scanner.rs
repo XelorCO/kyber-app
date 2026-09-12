@@ -1,5 +1,15 @@
-use tauri::AppHandle;
+//! Détection du champ mot de passe actuellement focalisé, par plateforme.
+//!
+//! - **Windows** : `SetWinEventHook` + UI Automation.
+//! - **macOS** : AXUIElement (Accessibility).
+//! - **Linux** : AT-SPI via D-Bus.
+//!
+//! Émet l'évènement Tauri `scanner-detected { context }` consommé par
+//! `ui/main.js`. Ne se déclenche pas dans les navigateurs Chromium (arbre
+//! d'accessibilité lazy) — c'est le rôle de l'extension.
+
 use std::sync::OnceLock;
+use tauri::AppHandle;
 
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
@@ -30,21 +40,17 @@ pub fn start_scanner(app_handle: AppHandle) {
 // ─────────────────────────────────────────────────────────────
 #[cfg(target_os = "windows")]
 mod windows_impl {
-    use super::{APP_HANDLE, ScanPayload};
+    use super::{ScanPayload, APP_HANDLE};
     use tauri::Emitter;
-    use windows::Win32::UI::Accessibility::{
-        CUIAutomation, IUIAutomation,
-        SetWinEventHook,
-    };
-    use windows::Win32::System::Com::{
-        CoInitializeEx, CoCreateInstance, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetMessageW, TranslateMessage, DispatchMessageW, MSG,
-        GetForegroundWindow, GetWindowTextW, GetWindowTextLengthW,
-        EVENT_OBJECT_FOCUS, WINEVENT_OUTOFCONTEXT,
-    };
     use windows::Win32::Foundation::{HMODULE, HWND};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+    };
+    use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation, SetWinEventHook};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextLengthW, GetWindowTextW,
+        TranslateMessage, EVENT_OBJECT_FOCUS, MSG, WINEVENT_OUTOFCONTEXT,
+    };
 
     unsafe extern "system" fn win_event_proc(
         _hook: windows::Win32::UI::Accessibility::HWINEVENTHOOK,
@@ -72,7 +78,10 @@ mod windows_impl {
                     let mut by_name = false;
                     if let Ok(name) = element.CurrentName() {
                         let n = name.to_string().to_lowercase();
-                        if n.contains("password") || n.contains("mot de passe") || n.contains("passwort") {
+                        if n.contains("password")
+                            || n.contains("mot de passe")
+                            || n.contains("passwort")
+                        {
                             by_name = true;
                         }
                     }
@@ -91,7 +100,10 @@ mod windows_impl {
                             return;
                         }
 
-                        log::info!("[SCANNER] Windows — champ password détecté dans '{}'", title);
+                        log::info!(
+                            "[SCANNER] Windows — champ password détecté dans '{}'",
+                            title
+                        );
                         let _ = app.emit("scanner-detected", ScanPayload { context: title });
                     }
                 }
@@ -135,10 +147,10 @@ mod windows_impl {
 #[cfg(target_os = "macos")]
 mod macos_impl {
     use super::ScanPayload;
-    use tauri::Emitter;
-    use std::ffi::c_void;
-    use core_foundation::string::{CFString, CFStringRef};
     use core_foundation::base::{CFTypeRef, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
+    use std::ffi::c_void;
+    use tauri::Emitter;
 
     // AXError = 0 → kAXErrorSuccess
     type AXUIElementRef = *const c_void;
@@ -165,11 +177,8 @@ mod macos_impl {
 
         let attr_focused = CFString::new("AXFocusedUIElement");
         let mut focused: CFTypeRef = std::ptr::null();
-        let err = AXUIElementCopyAttributeValue(
-            sys,
-            attr_focused.as_concrete_TypeRef(),
-            &mut focused,
-        );
+        let err =
+            AXUIElementCopyAttributeValue(sys, attr_focused.as_concrete_TypeRef(), &mut focused);
         CFRelease(sys as CFTypeRef);
 
         if err != 0 || focused.is_null() {
@@ -228,8 +237,12 @@ mod macos_impl {
                             let context = frontmost_app_name();
                             // Ne pas déclencher sur la fenêtre Kyber elle-même
                             if !context.to_lowercase().contains("kyber") {
-                                log::info!("[SCANNER] macOS — champ password détecté dans '{}'", context);
-                                let _ = app_handle.emit("scanner-detected", ScanPayload { context });
+                                log::info!(
+                                    "[SCANNER] macOS — champ password détecté dans '{}'",
+                                    context
+                                );
+                                let _ =
+                                    app_handle.emit("scanner-detected", ScanPayload { context });
                             }
                         }
                     }
@@ -263,9 +276,9 @@ mod linux_impl {
     async fn run_atspi_scanner(
         app_handle: tauri::AppHandle,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use atspi::{AccessibilityConnection, Role};
         use atspi::events::object::StateChangedEvent;
         use atspi::proxy::accessible::AccessibleProxy;
+        use atspi::{AccessibilityConnection, Role};
         use futures_util::StreamExt;
 
         let atspi = AccessibilityConnection::open().await?;
@@ -308,8 +321,12 @@ mod linux_impl {
 
                     // Ne pas déclencher sur la fenêtre Kyber elle-même
                     if !app_name.to_lowercase().contains("kyber") {
-                        log::info!("[SCANNER] Linux — champ password détecté dans '{}'", app_name);
-                        let _ = app_handle.emit("scanner-detected", ScanPayload { context: app_name });
+                        log::info!(
+                            "[SCANNER] Linux — champ password détecté dans '{}'",
+                            app_name
+                        );
+                        let _ =
+                            app_handle.emit("scanner-detected", ScanPayload { context: app_name });
                     }
                 } else if !is_pw {
                     last_was_password = false;
@@ -326,8 +343,8 @@ mod linux_impl {
         proxy: &atspi::proxy::accessible::AccessibleProxy<'_>,
         conn: &zbus::Connection,
     ) -> String {
-        use atspi::Role;
         use atspi::proxy::accessible::AccessibleProxy;
+        use atspi::Role;
 
         // Démarre depuis le proxy de l'élément focalisé
         let mut dest = proxy.inner().destination().to_string();
@@ -370,4 +387,3 @@ mod linux_impl {
         proxy.name().await.unwrap_or_else(|_| "Unknown".to_string())
     }
 }
-

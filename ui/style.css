@@ -401,24 +401,6 @@ input::placeholder{color:var(--muted2);}
 
 .err-text{color:var(--red);font-size:.8rem;margin-top:9px;}
 
-/* ══════════════════════════════════════════════════════════
-   UPGRADE MODAL
-   ══════════════════════════════════════════════════════════ */
-.upgrade-box{text-align:center;max-width:470px;}
-.upgrade-icon{font-size:2.4rem;margin-bottom:10px;background:var(--blue-g);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.upgrade-box h3{
-  font-size:1.35rem;font-weight:800;
-  background:var(--blue-g);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  margin-bottom:10px;
-}
-.upgrade-desc{font-size:.88rem;color:var(--muted);line-height:1.7;margin-bottom:18px;}
-.upgrade-perks{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:22px;text-align:left;}
-.perk{
-  background:var(--blue-d);border:1px solid rgba(99,102,241,.2);
-  border-radius:var(--r-sm);padding:7px 11px;font-size:.8rem;color:var(--text);
-}
-.upgrade-box .field{text-align:left;}
-.upgrade-box .modal-btns{margin-top:10px;}
 .field-optional{font-size:.73rem;color:var(--muted2);font-weight:400;margin-left:3px;}
 
 /* ══════════════════════════════════════════════════════════

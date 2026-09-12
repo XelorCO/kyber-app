@@ -16,6 +16,17 @@ src-tauri/target/
 .pqpassmgr/
 *.enc
 *.vault
+*.kyber
+
+# Secrets — ne JAMAIS committer (clés de signature updater, etc.)
+.env
+.env.*
+*.pem
+updater.key*
+*.key
+
+# Build artefacts locaux
+ui/dist/
 
 # Stray build logs
 err.txt

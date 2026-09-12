@@ -1,0 +1,13 @@
+# Normalise les fins de ligne : LF dans le dépôt, conversion locale selon l'OS.
+* text=auto eol=lf
+
+# Binaires — jamais de conversion
+*.png binary
+*.ico binary
+*.icns binary
+*.sig binary
+*.vault binary
+*.kyber binary
+
+# Scripts Windows : CRLF en local
+*.ps1 text eol=crlf

@@ -1,11 +1,24 @@
-use aes_gcm::{Aes256Gcm, Key, Nonce};
+//! Cœur cryptographique de Kyber.
+//!
+//! Chaîne du coffre v2 :
+//! `passphrase → Argon2id(64 Mio, t=4, p=1) → ML-KEM-1024 → HKDF-SHA256 → AES-256-GCM`.
+//!
+//! Sécurité *au repos* : elle repose sur la passphrase + Argon2id + AES-256-GCM.
+//! La clé secrète ML-KEM est scellée sous `seed_key = Argon2id(passphrase)`, donc
+//! la couche post-quantique n'ajoute **pas** de marge contre un bruteforce de
+//! passphrase — c'est de la défense en profondeur et la base du partage hybride.
+//! Voir `SECURITY.md`.
+
 use aes_gcm::aead::{Aead, KeyInit};
-use argon2::{Argon2, Algorithm, Version, Params};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+use argon2::{Algorithm, Argon2, Params, Version};
 use hkdf::Hkdf;
-use sha2::Sha256;
 use pqcrypto_kyber::kyber1024::*;
-use pqcrypto_traits::kem::{SharedSecret as PqSharedSecret, Ciphertext as PqCiphertext, SecretKey as PqSecretKeyTrait};
+use pqcrypto_traits::kem::{
+    Ciphertext as PqCiphertext, SecretKey as PqSecretKeyTrait, SharedSecret as PqSharedSecret,
+};
 use rand_core::{OsRng, RngCore};
+use sha2::Sha256;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -17,7 +30,9 @@ pub fn derive_seed_key(passphrase: &str, salt: &[u8]) -> [u8; 32] {
     let mut key = [0u8; 32];
     let params = Params::new(65536, 4, 1, Some(32)).unwrap();
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    argon2.hash_password_into(passphrase.as_bytes(), salt, &mut key).unwrap();
+    argon2
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .unwrap();
     key
 }
 
@@ -42,7 +57,8 @@ fn derive_final_key(seed_key: &[u8; 32], pq_ss: &[u8]) -> MasterKey {
     let hk = Hkdf::<Sha256>::new(None, &ikm);
     ikm.zeroize();
     let mut okm = [0u8; 32];
-    hk.expand(b"KyberVault-v2-final-key", &mut okm).expect("HKDF expand");
+    hk.expand(b"KyberVault-v2-final-key", &mut okm)
+        .expect("HKDF expand");
     MasterKey(okm)
 }
 
@@ -88,11 +104,17 @@ pub fn encrypt_vault_payload(master_key: &MasterKey, plaintext: &[u8]) -> (Vec<u
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
-    let ciphertext = cipher.encrypt(nonce, plaintext).expect("Encryption failure");
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext)
+        .expect("Encryption failure");
     (ciphertext, nonce_bytes)
 }
 
-pub fn decrypt_vault_payload(master_key: &MasterKey, nonce_bytes: &[u8; 12], ciphertext: &[u8]) -> Result<Vec<u8>, aes_gcm::Error> {
+pub fn decrypt_vault_payload(
+    master_key: &MasterKey,
+    nonce_bytes: &[u8; 12],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, aes_gcm::Error> {
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&master_key.0));
     let nonce = Nonce::from_slice(nonce_bytes);
     cipher.decrypt(nonce, ciphertext)
@@ -103,7 +125,7 @@ pub fn decrypt_vault_payload(master_key: &MasterKey, nonce_bytes: &[u8; 12], cip
 pub struct HybridKeyPair {
     pub pq_pk: pqcrypto_kyber::kyber1024::PublicKey,
     #[allow(dead_code)] // réservé pour le partage hybride (pas encore câblé)
-    pq_sk: pqcrypto_kyber::kyber1024::SecretKey,  // privé — ne pas exposer ni sérialiser
+    pq_sk: pqcrypto_kyber::kyber1024::SecretKey, // privé — ne pas exposer ni sérialiser
     pub cl_sk: EphemeralSecret,
     pub cl_pk: PublicKey,
 }
@@ -113,11 +135,19 @@ impl HybridKeyPair {
         let (pq_pk, pq_sk) = keypair();
         let cl_sk = EphemeralSecret::random_from_rng(OsRng);
         let cl_pk = PublicKey::from(&cl_sk);
-        Self { pq_pk, pq_sk, cl_sk, cl_pk }
+        Self {
+            pq_pk,
+            pq_sk,
+            cl_sk,
+            cl_pk,
+        }
     }
 }
 
-pub fn hybrid_encapsulate(pq_pk: &pqcrypto_kyber::kyber1024::PublicKey, cl_pk: &PublicKey) -> (Vec<u8>, Vec<u8>) {
+pub fn hybrid_encapsulate(
+    pq_pk: &pqcrypto_kyber::kyber1024::PublicKey,
+    cl_pk: &PublicKey,
+) -> (Vec<u8>, Vec<u8>) {
     // KEM post-quantique (Kyber1024)
     let (pq_ss, pq_ct) = encapsulate(pq_pk);
 
@@ -155,13 +185,20 @@ mod tests {
         let salt = [0u8; 16];
         let key = derive_master_key("motdepasse_test", &salt);
         // Argon2id produit toujours 32 bytes
-        assert_eq!(key.0.len(), 32, "La clé maître doit faire 32 bytes (AES-256)");
+        assert_eq!(
+            key.0.len(),
+            32,
+            "La clé maître doit faire 32 bytes (AES-256)"
+        );
         // Même entrée = même sortie (déterministe)
         let key2 = derive_master_key("motdepasse_test", &salt);
         assert_eq!(key.0, key2.0, "Argon2id doit être déterministe");
         // Passphrase différente = clé différente
         let key3 = derive_master_key("autre_motdepasse", &salt);
-        assert_ne!(key.0, key3.0, "Passphrases différentes doivent produire des clés différentes");
+        assert_ne!(
+            key.0, key3.0,
+            "Passphrases différentes doivent produire des clés différentes"
+        );
         println!("[ARGON2ID OK] clé 32B dérivée : {:02x?}...", &key.0[..4]);
     }
 
@@ -179,19 +216,28 @@ mod tests {
         assert_eq!(ciphertext.len(), plaintext.len() + 16);
 
         let decrypted = decrypt_vault_payload(&master_key, &nonce, &ciphertext).unwrap();
-        assert_eq!(decrypted, plaintext, "Le déchiffrement doit restituer le plaintext");
-        println!("[AES-256-GCM OK] ciphertext {} bytes, roundtrip validé", ciphertext.len());
+        assert_eq!(
+            decrypted, plaintext,
+            "Le déchiffrement doit restituer le plaintext"
+        );
+        println!(
+            "[AES-256-GCM OK] ciphertext {} bytes, roundtrip validé",
+            ciphertext.len()
+        );
     }
 
     #[test]
     fn test_aes256_gcm_wrong_key_fails() {
         let salt = [2u8; 16];
         let key_good = derive_master_key("bonne_cle", &salt);
-        let key_bad  = derive_master_key("mauvaise_cle", &salt);
+        let key_bad = derive_master_key("mauvaise_cle", &salt);
         let (ciphertext, nonce) = encrypt_vault_payload(&key_good, b"secret");
         // Mauvaise clé doit échouer (tag GCM invalide)
         let result = decrypt_vault_payload(&key_bad, &nonce, &ciphertext);
-        assert!(result.is_err(), "Une mauvaise clé doit être rejetée par le tag GCM");
+        assert!(
+            result.is_err(),
+            "Une mauvaise clé doit être rejetée par le tag GCM"
+        );
         println!("[AES-256-GCM OK] mauvaise clé correctement rejetée");
     }
 
@@ -203,11 +249,24 @@ mod tests {
         // pq_ct Kyber1024 = 1568 bytes
         assert_eq!(pq_ct.len(), 1568, "Ciphertext Kyber1024 = 1568 bytes");
         // pq_sk_enc = 3168 (SK) + 16 (GCM tag) = 3184 bytes
-        assert_eq!(pq_sk_enc.len(), 3168 + 16, "SK Kyber1024 chiffré = 3184 bytes");
+        assert_eq!(
+            pq_sk_enc.len(),
+            3168 + 16,
+            "SK Kyber1024 chiffré = 3184 bytes"
+        );
         // pq_pk accessible via HybridKeyPair pour vérification directe
         let pair = HybridKeyPair::generate();
-        assert_eq!(pair.pq_pk.as_bytes().len(), 1568, "Clé publique Kyber1024 = 1568 bytes");
-        println!("[KYBER1024 OK] pk={}B ct={}B sk_enc={}B", pair.pq_pk.as_bytes().len(), pq_ct.len(), pq_sk_enc.len());
+        assert_eq!(
+            pair.pq_pk.as_bytes().len(),
+            1568,
+            "Clé publique Kyber1024 = 1568 bytes"
+        );
+        println!(
+            "[KYBER1024 OK] pk={}B ct={}B sk_enc={}B",
+            pair.pq_pk.as_bytes().len(),
+            pq_ct.len(),
+            pq_sk_enc.len()
+        );
     }
 
     #[test]
@@ -215,10 +274,22 @@ mod tests {
         let pair = HybridKeyPair::generate();
         let (shared_secret, ciphertext) = hybrid_encapsulate(&pair.pq_pk, &pair.cl_pk);
         // Shared secret = 32 bytes (sortie HKDF)
-        assert_eq!(shared_secret.len(), 32, "Shared secret hybride doit faire 32 bytes");
+        assert_eq!(
+            shared_secret.len(),
+            32,
+            "Shared secret hybride doit faire 32 bytes"
+        );
         // Ciphertext Kyber1024 = 1568 bytes + 32 bytes X25519 public key
-        assert_eq!(ciphertext.len(), 1568 + 32, "Ciphertext hybride = Kyber1024(1568B) + X25519(32B)");
-        println!("[KYBER1024 OK] KEM encapsulation : ss={}B ct={}B", shared_secret.len(), ciphertext.len());
+        assert_eq!(
+            ciphertext.len(),
+            1568 + 32,
+            "Ciphertext hybride = Kyber1024(1568B) + X25519(32B)"
+        );
+        println!(
+            "[KYBER1024 OK] KEM encapsulation : ss={}B ct={}B",
+            shared_secret.len(),
+            ciphertext.len()
+        );
     }
 
     #[test]
@@ -240,13 +311,19 @@ mod tests {
 
         let decrypted = decrypt_vault_payload(&final_key_open, &nonce, &ciphertext)
             .expect("Déchiffrement doit réussir");
-        assert_eq!(decrypted, plaintext_vault, "Les données doivent être identiques après roundtrip v2");
+        assert_eq!(
+            decrypted, plaintext_vault,
+            "Les données doivent être identiques après roundtrip v2"
+        );
         println!("[V2 ROUNDTRIP OK] create → encrypt → open → decrypt : données intactes");
 
         // Mauvaise passphrase → échec garanti
         let wrong_seed = derive_seed_key("mauvaise_passphrase", &salt);
         let result = open_kyber_vault_key(&wrong_seed, &pq_ct, &pq_sk_enc, &pq_sk_nonce);
-        assert!(result.is_err(), "Mauvaise passphrase doit être rejetée au niveau Kyber");
+        assert!(
+            result.is_err(),
+            "Mauvaise passphrase doit être rejetée au niveau Kyber"
+        );
         println!("[V2 ROUNDTRIP OK] mauvaise passphrase rejetée avant même AES");
     }
 
@@ -255,13 +332,20 @@ mod tests {
         // Deux paires générées indépendamment ne doivent JAMAIS partager la même clé
         let pair1 = HybridKeyPair::generate();
         let pair2 = HybridKeyPair::generate();
-        assert_ne!(pair1.pq_pk.as_bytes(), pair2.pq_pk.as_bytes(), "Deux PK Kyber1024 différentes");
+        assert_ne!(
+            pair1.pq_pk.as_bytes(),
+            pair2.pq_pk.as_bytes(),
+            "Deux PK Kyber1024 différentes"
+        );
 
         // Encapsuler avec la clé de pair1, essayer de décoder avec la clé de pair2
         // → le shared_secret obtenu sera différent (pas d'oracle de déchiffrement sans SK)
         let (ss1, _ct) = hybrid_encapsulate(&pair1.pq_pk, &pair1.cl_pk);
         let (ss2, _ct2) = hybrid_encapsulate(&pair2.pq_pk, &pair2.cl_pk);
-        assert_ne!(ss1, ss2, "Shared secrets de paires différentes doivent être différents");
+        assert_ne!(
+            ss1, ss2,
+            "Shared secrets de paires différentes doivent être différents"
+        );
 
         // Preuve que AES chiffré pour pair1 est illisible par pair2
         let key1_bytes: [u8; 32] = ss1.try_into().unwrap();
@@ -270,7 +354,10 @@ mod tests {
         let mk2 = MasterKey(key2_bytes);
         let (ct, nonce) = encrypt_vault_payload(&mk1, b"secret de pair1");
         let result = decrypt_vault_payload(&mk2, &nonce, &ct);
-        assert!(result.is_err(), "La clé de pair2 ne peut PAS déchiffrer ce qu'a chiffré pair1");
+        assert!(
+            result.is_err(),
+            "La clé de pair2 ne peut PAS déchiffrer ce qu'a chiffré pair1"
+        );
         println!("[NON-FORGEABLE OK] clés indépendantes, cross-déchiffrement impossible");
     }
 }

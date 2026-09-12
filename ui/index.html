@@ -256,29 +256,10 @@
             <input type="file" id="file-input" accept=".csv" class="hidden" />
           </div>
           <div class="settings-card" id="export-card">
-            <h3>Exporter les mots de passe <span style="font-size:.7rem;color:var(--blue);font-weight:600;">PRO</span></h3>
+            <h3>Exporter les mots de passe</h3>
             <p>Exportez votre coffre au format CSV compatible Bitwarden / 1Password.</p>
             <button class="btn-secondary" id="export-csv-btn">↑ Exporter en CSV</button>
             <p id="export-status" class="import-status"></p>
-          </div>
-          <div class="settings-card" id="sett-license-card">
-            <h3>Licence Kyber</h3>
-            <div id="sett-license-free">
-              <p>Vous utilisez la version <strong>Gratuite</strong> / 10 mots de passe maximum.</p>
-              <div class="import-row" style="margin-top:14px">
-                <button class="btn-primary" id="sett-upgrade-btn">✦ Mettre à niveau</button>
-              </div>
-              <div class="field" style="margin-top:18px">
-                <label>Clé de licence (reçue par e-mail)</label>
-                <input type="text" id="sett-license-key" placeholder="Collez votre clé ici" />
-              </div>
-              <button class="btn-secondary full" id="sett-activate-btn" style="margin-top:8px">Activer la licence</button>
-              <p id="sett-license-err" class="err-text"></p>
-            </div>
-            <div id="sett-license-pro" class="hidden">
-              <p>Licence <strong style="color:var(--green)">Premium ✓</strong> active.</p>
-              <p id="sett-license-name" style="color:var(--muted2);font-size:.82rem;margin-top:4px"></p>
-            </div>
           </div>
           <div class="settings-card" id="update-card">
             <h3>Mises à jour <span id="update-badge" class="hidden" style="font-size:.7rem;color:var(--green);font-weight:600;">NOUVELLE VERSION</span></h3>
@@ -290,7 +271,7 @@
           </div>
           <div class="settings-card">
             <h3>À propos de Kyber</h3>
-            <p id="about-version">Version 1.2.0 · Kyber1024 + AES-256-GCM + Argon2id (NIST PQC)</p>
+            <p id="about-version">Version 2.0.0 · Kyber1024 + AES-256-GCM + Argon2id (NIST PQC)</p>
             <p class="fr-badge">Développé en France / Aucune donnée transmise</p>
           </div>
         </div>
@@ -323,31 +304,6 @@
         <label class="cb-label"><input type="checkbox" id="sp-opt-symbols" checked /> Symboles</label>
       </div>
       <button class="btn-primary full" id="sp-gen-btn">✦ Générer &amp; Sauvegarder</button>
-    </div>
-  </div>
-
-  <!-- ═══ MODALE UPGRADE ═══ -->
-  <div id="upgrade-modal" class="modal-overlay hidden">
-    <div class="modal-box upgrade-box">
-      <div class="upgrade-icon">★</div>
-      <h3>Limite atteinte</h3>
-      <p class="upgrade-desc" id="upgrade-desc">La version gratuite est limitée à <strong>10 mots de passe</strong>.<br>Passez à Kyber Premium pour en stocker un nombre illimité.</p>
-      <div class="upgrade-perks">
-        <div class="perk">✓ Mots de passe illimités</div>
-        <div class="perk">✓ Auto-fill natif multi-OS</div>
-        <div class="perk">✓ Analyse de santé avancée</div>
-        <div class="perk">✓ Mises à jour à vie</div>
-      </div>
-      <button class="btn-primary full" id="upgrade-go-btn">Voir les offres → kyber-security.fr</button>
-      <div class="field" style="margin-top:20px">
-        <label>Déjà une clé de licence ?</label>
-        <input type="text" id="upgrade-license-key" placeholder="Collez votre clé ici" />
-      </div>
-      <div class="modal-btns">
-        <button class="btn-secondary" id="upgrade-cancel">Annuler</button>
-        <button class="btn-primary" id="upgrade-activate-btn">Activer</button>
-      </div>
-      <p id="upgrade-err" class="err-text"></p>
     </div>
   </div>
 

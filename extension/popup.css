@@ -378,3 +378,56 @@ input:focus { border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(99, 102, 2
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Bouton "Fichier" dans l'en-tête ─────────────────────────────────────── */
+.head-btn {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.head-btn:hover { color: var(--text); border-color: var(--muted2); background: var(--bg2); }
+
+/* ── Vue chiffrement de fichiers ─────────────────────────────────────────── */
+.link-back {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 10px;
+}
+.link-back:hover { color: var(--text); }
+
+.file-drop {
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  padding: 22px 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  word-break: break-all;
+}
+.file-drop:hover, .file-drop.drag {
+  border-color: var(--indigo);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--text);
+}
+
+.file-mode {
+  font-size: 0.78rem;
+  color: var(--indigo);
+  margin: 12px 0 4px;
+}
+
+.file-progress { margin: 12px 0 4px; display: flex; align-items: center; gap: 8px; }
+.file-progress .strength-bar { flex: 1; }

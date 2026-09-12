@@ -1,8 +1,18 @@
+//! Chiffrement de fichiers et de dossiers avec la clé du coffre **ouvert**.
+//!
+//! Format `.kyber` (magic `KYBF`) : `magic[4] ‖ nonce[12] ‖ AES-256-GCM(payload)`.
+//! Payload en clair : `[meta_len 4 o LE][JSON FileMeta][données ou archive ZIP]`.
+//! Un dossier est zippé en mémoire puis chiffré. Le déchiffrement est borné :
+//! protection zip-slip et limite anti zip-bomb (500 Mo décompressés).
+//!
+//! Distinct du format `KYBP` (par mot de passe) utilisé par le site et
+//! l'extension.
+
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::crypto::{MasterKey, encrypt_vault_payload, decrypt_vault_payload};
+use crate::crypto::{decrypt_vault_payload, encrypt_vault_payload, MasterKey};
 
 const MAGIC: &[u8; 4] = b"KYBF";
 
@@ -34,7 +44,8 @@ fn parse_payload(plaintext: &[u8]) -> Result<(Vec<u8>, FileMeta), String> {
     if plaintext.len() < 4 {
         return Err("Payload corrompu.".to_string());
     }
-    let meta_len = u32::from_le_bytes([plaintext[0], plaintext[1], plaintext[2], plaintext[3]]) as usize;
+    let meta_len =
+        u32::from_le_bytes([plaintext[0], plaintext[1], plaintext[2], plaintext[3]]) as usize;
     if plaintext.len() < 4 + meta_len {
         return Err("Métadonnées corrompues.".to_string());
     }
@@ -45,7 +56,12 @@ fn parse_payload(plaintext: &[u8]) -> Result<(Vec<u8>, FileMeta), String> {
 }
 
 /// Écrit le fichier .kyber : [MAGIC 4B][nonce 12B][ciphertext]
-fn write_kyber_file(dest: &Path, master_key: &MasterKey, meta: &FileMeta, data: &[u8]) -> Result<(), String> {
+fn write_kyber_file(
+    dest: &Path,
+    master_key: &MasterKey,
+    meta: &FileMeta,
+    data: &[u8],
+) -> Result<(), String> {
     let payload = build_payload(meta, data);
     let (ciphertext, nonce) = encrypt_vault_payload(master_key, &payload);
 
@@ -69,7 +85,9 @@ fn read_kyber_file(source: &Path, master_key: &MasterKey) -> Result<(Vec<u8>, Fi
         return Err("Ce fichier n'est pas un fichier Kyber chiffré (.kyber).".to_string());
     }
 
-    let nonce: [u8; 12] = raw[4..16].try_into().map_err(|_| "Nonce invalide".to_string())?;
+    let nonce: [u8; 12] = raw[4..16]
+        .try_into()
+        .map_err(|_| "Nonce invalide".to_string())?;
     let ciphertext = &raw[16..];
 
     let plaintext = decrypt_vault_payload(master_key, &nonce, ciphertext)
@@ -96,13 +114,15 @@ fn zip_folder(folder_path: &Path) -> Result<Vec<u8>, String> {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            let rel = path.strip_prefix(base)
+            let rel = path
+                .strip_prefix(base)
                 .map_err(|e| format!("strip_prefix: {}", e))?
                 .to_string_lossy()
                 .replace('\\', "/");
 
             if path.is_dir() {
-                zip.add_directory(&rel, options).map_err(|e| e.to_string())?;
+                zip.add_directory(&rel, options)
+                    .map_err(|e| e.to_string())?;
             } else {
                 zip.start_file(&rel, options).map_err(|e| e.to_string())?;
                 let data = fs::read(path).map_err(|e| e.to_string())?;
@@ -118,11 +138,16 @@ fn zip_folder(folder_path: &Path) -> Result<Vec<u8>, String> {
 // ─── API publique ───────────────────────────────────────────────────────────
 
 /// Chiffre un fichier et le sauvegarde dans dest_path.
-pub fn encrypt_file(master_key: &MasterKey, source_path: &str, dest_path: &str) -> Result<String, String> {
+pub fn encrypt_file(
+    master_key: &MasterKey,
+    source_path: &str,
+    dest_path: &str,
+) -> Result<String, String> {
     let source = Path::new(source_path);
-    let dest   = Path::new(dest_path);
+    let dest = Path::new(dest_path);
 
-    let original_name = source.file_name()
+    let original_name = source
+        .file_name()
         .ok_or("Chemin source invalide")?
         .to_string_lossy()
         .to_string();
@@ -130,22 +155,33 @@ pub fn encrypt_file(master_key: &MasterKey, source_path: &str, dest_path: &str) 
     const MAX_FILE_SIZE: u64 = 500 * 1024 * 1024; // 500 MB
     let file_size = source.metadata().map(|m| m.len()).unwrap_or(0);
     if file_size > MAX_FILE_SIZE {
-        return Err(format!("Fichier trop volumineux ({} MB). Limite : 500 MB.", file_size / 1024 / 1024));
+        return Err(format!(
+            "Fichier trop volumineux ({} MB). Limite : 500 MB.",
+            file_size / 1024 / 1024
+        ));
     }
 
     let data = fs::read(source).map_err(|e| format!("Lecture du fichier : {}", e))?;
-    let meta = FileMeta { name: original_name, is_folder: false };
+    let meta = FileMeta {
+        name: original_name,
+        is_folder: false,
+    };
 
     write_kyber_file(dest, master_key, &meta, &data)?;
     Ok(dest_path.to_string())
 }
 
 /// Chiffre un dossier entier (zip → chiffrement) et le sauvegarde dans dest_path.
-pub fn encrypt_folder(master_key: &MasterKey, folder_path: &str, dest_path: &str) -> Result<String, String> {
+pub fn encrypt_folder(
+    master_key: &MasterKey,
+    folder_path: &str,
+    dest_path: &str,
+) -> Result<String, String> {
     let source = Path::new(folder_path);
-    let dest   = Path::new(dest_path);
+    let dest = Path::new(dest_path);
 
-    let folder_name = source.file_name()
+    let folder_name = source
+        .file_name()
         .ok_or("Chemin dossier invalide")?
         .to_string_lossy()
         .to_string();
@@ -159,11 +195,17 @@ pub fn encrypt_folder(master_key: &MasterKey, folder_path: &str, dest_path: &str
         .map(|m| m.len())
         .sum();
     if total_size > MAX_FOLDER_SIZE {
-        return Err(format!("Dossier trop volumineux ({} MB). Limite : 500 MB.", total_size / 1024 / 1024));
+        return Err(format!(
+            "Dossier trop volumineux ({} MB). Limite : 500 MB.",
+            total_size / 1024 / 1024
+        ));
     }
 
     let zip_data = zip_folder(source)?;
-    let meta = FileMeta { name: folder_name, is_folder: true };
+    let meta = FileMeta {
+        name: folder_name,
+        is_folder: true,
+    };
 
     write_kyber_file(dest, master_key, &meta, &zip_data)?;
     Ok(dest_path.to_string())
@@ -171,7 +213,11 @@ pub fn encrypt_folder(master_key: &MasterKey, folder_path: &str, dest_path: &str
 
 /// Déchiffre un fichier .kyber et restaure le fichier original dans dest_dir.
 /// Retourne le nom original et le chemin de sortie.
-pub fn decrypt_file(master_key: &MasterKey, source_path: &str, dest_dir: &str) -> Result<DecryptResult, String> {
+pub fn decrypt_file(
+    master_key: &MasterKey,
+    source_path: &str,
+    dest_dir: &str,
+) -> Result<DecryptResult, String> {
     let source = Path::new(source_path);
     let (data, meta) = read_kyber_file(source, master_key)?;
 
@@ -210,14 +256,22 @@ pub fn decrypt_file(master_key: &MasterKey, source_path: &str, dest_dir: &str) -
                 let mut file = fs::File::create(&entry_path).map_err(|e| e.to_string())?;
                 let remaining = MAX_DECOMPRESSED_SIZE.saturating_sub(total_extracted);
                 if remaining == 0 {
-                    return Err("Archive trop volumineuse une fois décompressée (limite 500 MB).".to_string());
+                    return Err(
+                        "Archive trop volumineuse une fois décompressée (limite 500 MB)."
+                            .to_string(),
+                    );
                 }
                 use std::io::Read;
                 let copied = std::io::copy(&mut entry.by_ref().take(remaining), &mut file)
                     .map_err(|e| e.to_string())?;
                 total_extracted += copied;
-                if copied == remaining && entry.bytes().next().is_some() {
-                    return Err("Archive trop volumineuse une fois décompressée (limite 500 MB).".to_string());
+                // Il reste des octets à lire au-delà de la limite : archive trop grosse.
+                let mut probe = [0u8; 1];
+                if copied == remaining && entry.read(&mut probe).map(|n| n > 0).unwrap_or(false) {
+                    return Err(
+                        "Archive trop volumineuse une fois décompressée (limite 500 MB)."
+                            .to_string(),
+                    );
                 }
             }
         }
@@ -234,5 +288,88 @@ pub fn decrypt_file(master_key: &MasterKey, source_path: &str, dest_dir: &str) -
             name: meta.name.clone(),
             path: out_path.to_string_lossy().to_string(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::derive_master_key;
+
+    fn tmp(name: &str) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "kyber_filelock_test_{}_{}",
+            std::process::id(),
+            name
+        ));
+        p
+    }
+
+    #[test]
+    fn roundtrip_fichier() {
+        let key = derive_master_key("passphrase_test", &[7u8; 16]);
+        let src = tmp("src.bin");
+        let enc = tmp("src.bin.kyber");
+        let out_dir = tmp("out");
+        let _ = fs::create_dir_all(&out_dir);
+        let contenu = b"Donnees confidentielles \x00\x01\x02 fin.";
+        fs::write(&src, contenu).unwrap();
+
+        encrypt_file(&key, src.to_str().unwrap(), enc.to_str().unwrap()).unwrap();
+
+        // Le fichier chiffré commence par le magic KYBF et ne contient pas le clair.
+        let raw = fs::read(&enc).unwrap();
+        assert_eq!(&raw[..4], MAGIC);
+        assert!(!raw.windows(contenu.len()).any(|w| w == contenu));
+
+        let res = decrypt_file(&key, enc.to_str().unwrap(), out_dir.to_str().unwrap()).unwrap();
+        let restauré = fs::read(out_dir.join(&res.name)).unwrap();
+        assert_eq!(
+            restauré, contenu,
+            "le déchiffrement doit restituer l'original"
+        );
+
+        let _ = fs::remove_file(&src);
+        let _ = fs::remove_file(&enc);
+        let _ = fs::remove_dir_all(&out_dir);
+    }
+
+    #[test]
+    fn mauvaise_cle_rejetee() {
+        let bonne = derive_master_key("bonne", &[1u8; 16]);
+        let mauvaise = derive_master_key("mauvaise", &[1u8; 16]);
+        let src = tmp("wk_src.txt");
+        let enc = tmp("wk_src.txt.kyber");
+        let out_dir = tmp("wk_out");
+        let _ = fs::create_dir_all(&out_dir);
+        fs::write(&src, b"secret").unwrap();
+
+        encrypt_file(&bonne, src.to_str().unwrap(), enc.to_str().unwrap()).unwrap();
+        let res = decrypt_file(&mauvaise, enc.to_str().unwrap(), out_dir.to_str().unwrap());
+        assert!(res.is_err(), "une mauvaise clé doit être rejetée (tag GCM)");
+
+        let _ = fs::remove_file(&src);
+        let _ = fs::remove_file(&enc);
+        let _ = fs::remove_dir_all(&out_dir);
+    }
+
+    #[test]
+    fn fichier_non_kyber_rejete() {
+        let key = derive_master_key("k", &[2u8; 16]);
+        let src = tmp("notkyber.dat");
+        let out_dir = tmp("nk_out");
+        let _ = fs::create_dir_all(&out_dir);
+        fs::write(
+            &src,
+            b"ce n'est pas un fichier kyber, juste du texte assez long",
+        )
+        .unwrap();
+
+        let res = decrypt_file(&key, src.to_str().unwrap(), out_dir.to_str().unwrap());
+        assert!(res.is_err(), "un fichier sans magic KYBF doit être refusé");
+
+        let _ = fs::remove_file(&src);
+        let _ = fs::remove_dir_all(&out_dir);
     }
 }

@@ -1,10 +1,10 @@
 [package]
 name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+version = "2.0.0"
+description = "Kyber — gestionnaire de mots de passe post-quantique, 100% local"
+authors = ["Enzo Paccard"]
+license = "Apache-2.0"
+repository = "https://github.com/XelorCO/kyber-app"
 edition = "2021"
 rust-version = "1.77.2"
 default-run = "Kyber"
@@ -15,8 +15,8 @@ default-run = "Kyber"
 name = "Kyber"
 path = "src/main.rs"
 
-# Hôte de native messaging pour l'extension navigateur (beta) : réutilise
-# app_lib (même crypto/vault/license que l'app), parle JSON sur stdin/stdout.
+# Hôte de native messaging pour l'extension navigateur : réutilise app_lib
+# (même moteur crypto/vault que l'app), parle JSON sur stdin/stdout.
 [[bin]]
 name = "kyber-native-host"
 path = "src/bin/native_host.rs"
@@ -44,11 +44,9 @@ argon2 = "0.5.2"
 rand_core = { version = "0.6", features = ["std"] }
 rand = "0.8.5"
 x25519-dalek = { version = "2.0.0", features = ["static_secrets"] }
-ed25519-dalek = "2.0.0"
 
-# Crypto Post-Quantique
+# Crypto post-quantique (ML-KEM-1024 / NIST FIPS 203)
 pqcrypto-kyber = "0.8.0"
-pqcrypto-dilithium = "0.5.0"
 pqcrypto-traits = "0.3.4"
 
 # Utilitaires
@@ -62,7 +60,6 @@ arboard = "3"
 csv = "1"
 hex = "0.4"
 dirs = "5.0"
-base64 = "0.22.0"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 walkdir = "2"
 

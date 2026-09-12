@@ -45,9 +45,8 @@
       <circle cx="95" cy="100" r="3" fill="white" opacity="0.9"/>
     </svg>
     <span class="brand">Kyber</span>
-    <span class="beta">BETA</span>
     <span id="conn-badge" class="conn hidden"></span>
-    <span id="tier-badge" class="tier hidden"></span>
+    <button id="open-files-btn" class="head-btn" title="Chiffrer / déchiffrer un fichier">⧉ Fichier</button>
   </header>
 
   <section id="view-loading" class="view">
@@ -65,18 +64,6 @@
     </p>
     <a class="btn-primary" href="https://kyber-security.fr/telechargement" target="_blank" rel="noopener">
       Télécharger Kyber
-    </a>
-  </section>
-
-  <section id="view-pro-required" class="view hidden">
-    <p class="warn">◆ Extension réservée aux licences payantes.</p>
-    <p class="muted small">
-      L'extension navigateur nécessite une licence Kyber Pro, Famille ou
-      Équipe. La version gratuite reste utilisable dans l'application de
-      bureau, mais pas ici.
-    </p>
-    <a class="btn-primary" href="https://kyber-security.fr/#pricing" target="_blank" rel="noopener">
-      Voir les licences
     </a>
   </section>
 
@@ -137,8 +124,42 @@
     <button id="lock-btn" class="btn-secondary">Verrouiller</button>
   </section>
 
+  <section id="view-files" class="view hidden">
+    <button id="files-back" class="link-back">← Retour</button>
+    <p class="muted small">
+      Chiffre ou déchiffre n'importe quel fichier avec un mot de passe,
+      entièrement dans le navigateur. Format <code>.kyber</code> identique à
+      celui de l'app et du site.
+    </p>
+
+    <div id="file-drop" class="file-drop">
+      <input type="file" id="file-input" hidden />
+      <span id="file-drop-label">Cliquez ou déposez un fichier ici</span>
+    </div>
+
+    <div id="file-panel" class="hidden">
+      <p id="file-mode" class="file-mode"></p>
+
+      <label class="field-label" for="file-pass">Mot de passe</label>
+      <div class="gen-output-row">
+        <input id="file-pass" type="password" placeholder="16 caractères minimum" />
+        <button class="icon-btn-lg" id="file-pass-gen" type="button" title="Générer un mot de passe fort">✦</button>
+      </div>
+
+      <div id="file-progress" class="file-progress hidden">
+        <div class="strength-bar"><div id="file-progress-fill" class="strength-fill"></div></div>
+        <span id="file-progress-lbl" class="muted small"></span>
+      </div>
+
+      <p id="file-err" class="err"></p>
+      <button id="file-go" class="btn-primary full">Chiffrer</button>
+    </div>
+  </section>
+
   <div id="toast" class="toast hidden"></div>
 
+  <script src="vendor/argon2.js"></script>
+  <script type="module" src="filecrypto.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

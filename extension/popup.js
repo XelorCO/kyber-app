@@ -1,9 +1,9 @@
 const views = {
   loading: document.getElementById("view-loading"),
   notInstalled: document.getElementById("view-not-installed"),
-  proRequired: document.getElementById("view-pro-required"),
   locked: document.getElementById("view-locked"),
   unlocked: document.getElementById("view-unlocked"),
+  files: document.getElementById("view-files"),
 };
 
 function showView(name) {
@@ -13,16 +13,6 @@ function showView(name) {
 
 function sendToBackground(type, extra = {}) {
   return new Promise((resolve) => chrome.runtime.sendMessage({ type, ...extra }, resolve));
-}
-
-function setTierBadge(tier) {
-  const badge = document.getElementById("tier-badge");
-  if (!tier) {
-    badge.classList.add("hidden");
-    return;
-  }
-  badge.textContent = tier === "pro" ? "PRO" : tier === "famille" ? "FAMILLE" : tier.toUpperCase();
-  badge.classList.remove("hidden");
 }
 
 // Affiché uniquement quand le coffre vient d'une session déjà ouverte dans
@@ -41,7 +31,6 @@ function errorMessage(code) {
     NATIVE_HOST_UNAVAILABLE: "Impossible de contacter l'app Kyber. Est-elle installée ?",
     "Mot de passe incorrect.": "Mot de passe incorrect.",
     "Coffre invalide ou corrompu.": "Ce fichier n'est pas un coffre Kyber valide.",
-    PRO_REQUIRED: "L'extension nécessite une licence Pro, Famille ou Équipe.",
   };
   return known[code] || code || "Erreur inconnue.";
 }
@@ -428,17 +417,6 @@ async function boot() {
     return;
   }
 
-  // L'extension est réservée aux licences payantes (Pro / Famille / Équipe) :
-  // la version gratuite de l'app reste utilisable normalement, mais pas ici.
-  // Même vérification côté hôte natif (unlock / try_live_session) — ce garde
-  // côté popup évite juste d'afficher la saisie du mot de passe pour rien.
-  if (!ping.data.licensed) {
-    if (existing.ok) await sendToBackground("LOCK");
-    showView("proRequired");
-    return;
-  }
-  setTierBadge(ping.data.tier);
-
   const cameFromLive = existing.ok && existing.data.viaLiveSession;
 
   if (existing.ok && !cameFromLive) {
@@ -523,6 +501,166 @@ document.getElementById("lock-btn").addEventListener("click", async () => {
   setLiveBadge(false);
   switchTab("vault");
   showView("locked");
+});
+
+// ══════════════════════════════════════════════════
+//  CHIFFREMENT DE FICHIERS (autonome, 100 % navigateur)
+//  Logique portée depuis kyber-site/lib/kyberfile.ts (format KYBP), exposée
+//  par filecrypto.js sur window.KyberFile.
+// ══════════════════════════════════════════════════
+let selectedFile = null;
+let fileBusy = false;
+
+const fileEls = {
+  drop: document.getElementById("file-drop"),
+  input: document.getElementById("file-input"),
+  dropLabel: document.getElementById("file-drop-label"),
+  panel: document.getElementById("file-panel"),
+  mode: document.getElementById("file-mode"),
+  pass: document.getElementById("file-pass"),
+  passGen: document.getElementById("file-pass-gen"),
+  progress: document.getElementById("file-progress"),
+  progressFill: document.getElementById("file-progress-fill"),
+  progressLbl: document.getElementById("file-progress-lbl"),
+  err: document.getElementById("file-err"),
+  go: document.getElementById("file-go"),
+};
+
+const PHASE_LABEL = {
+  compress: "Compression…",
+  derive: "Dérivation de la clé (Argon2id)…",
+  kem: "Encapsulation post-quantique…",
+  cipher: "Chiffrement AES-256-GCM…",
+  done: "Terminé",
+};
+const PHASE_PCT = { compress: 15, derive: 55, kem: 75, cipher: 90, done: 100 };
+
+function fileIsEncrypted(name) {
+  return name.toLowerCase().endsWith(".kyber");
+}
+
+function resetFilePanel() {
+  selectedFile = null;
+  fileEls.panel.classList.add("hidden");
+  fileEls.progress.classList.add("hidden");
+  fileEls.err.textContent = "";
+  fileEls.pass.value = "";
+  fileEls.dropLabel.textContent = "Cliquez ou déposez un fichier ici";
+}
+
+function pickFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  const decrypting = fileIsEncrypted(file.name);
+  fileEls.dropLabel.textContent = file.name;
+  fileEls.mode.textContent = decrypting
+    ? "Fichier .kyber détecté → déchiffrement"
+    : "→ chiffrement (produira un .kyber)";
+  fileEls.go.textContent = decrypting ? "Déchiffrer" : "Chiffrer";
+  fileEls.pass.placeholder = decrypting ? "Mot de passe du fichier" : "16 caractères minimum";
+  fileEls.err.textContent = "";
+  fileEls.progress.classList.add("hidden");
+  fileEls.panel.classList.remove("hidden");
+}
+
+fileEls.drop.addEventListener("click", () => fileEls.input.click());
+fileEls.input.addEventListener("change", (e) => pickFile(e.target.files[0]));
+["dragover", "dragenter"].forEach((ev) =>
+  fileEls.drop.addEventListener(ev, (e) => {
+    e.preventDefault();
+    fileEls.drop.classList.add("drag");
+  }),
+);
+["dragleave", "drop"].forEach((ev) =>
+  fileEls.drop.addEventListener(ev, (e) => {
+    e.preventDefault();
+    fileEls.drop.classList.remove("drag");
+  }),
+);
+fileEls.drop.addEventListener("drop", (e) => {
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) pickFile(e.dataTransfer.files[0]);
+});
+
+fileEls.passGen.addEventListener("click", () => {
+  if (!window.KyberFile) return;
+  fileEls.pass.type = "text";
+  fileEls.pass.value = window.KyberFile.generateStrongPassword();
+});
+
+function setFilePhase(phase) {
+  fileEls.progress.classList.remove("hidden");
+  fileEls.progressFill.style.width = (PHASE_PCT[phase] || 0) + "%";
+  fileEls.progressLbl.textContent = PHASE_LABEL[phase] || "";
+}
+
+function downloadBytes(bytes, filename) {
+  // Un clic programmatique sur <a download> : Chrome lit le blob de façon
+  // synchrone, donc le téléchargement aboutit même si le popup se ferme
+  // juste après (pas besoin de la permission "downloads" ni du service worker).
+  const blob = new Blob([bytes], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+fileEls.go.addEventListener("click", async () => {
+  if (fileBusy || !selectedFile) return;
+  fileEls.err.textContent = "";
+
+  const KF = window.KyberFile;
+  if (!KF) {
+    fileEls.err.textContent = "Module de chiffrement non chargé. Rouvrez le popup.";
+    return;
+  }
+  const password = fileEls.pass.value;
+  const decrypting = fileIsEncrypted(selectedFile.name);
+
+  if (!decrypting) {
+    const pErr = KF.validatePassword(password);
+    if (pErr) {
+      fileEls.err.textContent = pErr;
+      return;
+    }
+  } else if (!password) {
+    fileEls.err.textContent = "Entrez le mot de passe du fichier.";
+    return;
+  }
+
+  fileBusy = true;
+  fileEls.go.disabled = true;
+  try {
+    const buf = new Uint8Array(await selectedFile.arrayBuffer());
+    if (decrypting) {
+      const { meta, data } = await KF.decryptKyberFile(buf, password, setFilePhase);
+      downloadBytes(data, meta.name || selectedFile.name.replace(/\.kyber$/i, ""));
+      showToast("✓ Fichier déchiffré");
+    } else {
+      const out = await KF.encryptKyberFile(buf, selectedFile.name, password, setFilePhase);
+      downloadBytes(out, selectedFile.name + ".kyber");
+      showToast("✓ Fichier chiffré");
+    }
+    resetFilePanel();
+  } catch (e) {
+    fileEls.err.textContent = e && e.message ? e.message : "Échec de l'opération.";
+    fileEls.progress.classList.add("hidden");
+  } finally {
+    fileBusy = false;
+    fileEls.go.disabled = false;
+  }
+});
+
+document.getElementById("open-files-btn").addEventListener("click", () => {
+  resetFilePanel();
+  showView("files");
+});
+document.getElementById("files-back").addEventListener("click", () => {
+  resetFilePanel();
+  boot();
 });
 
 boot();

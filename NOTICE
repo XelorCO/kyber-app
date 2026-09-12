@@ -1,0 +1,11 @@
+Kyber — gestionnaire de mots de passe post-quantique
+Copyright 2026 Enzo Paccard
+
+Ce produit est distribué sous licence Apache 2.0 (voir le fichier LICENSE).
+
+Il inclut des composants tiers sous leurs licences respectives, notamment :
+  - Tauri (MIT / Apache-2.0)
+  - RustCrypto : aes-gcm, argon2, hkdf, sha2 (MIT / Apache-2.0)
+  - pqcrypto-kyber — ML-KEM-1024 / NIST FIPS 203 (MIT / Apache-2.0)
+  - x25519-dalek (BSD-3-Clause)
+Voir Cargo.lock et ui/package-lock.json pour la liste complète.
